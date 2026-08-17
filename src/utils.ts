@@ -26,7 +26,7 @@ export function formatMoney(amount: number, lang: AppLanguage, currencyCode: str
   return `${formattedNumber} ${symbol}`;
 }
 
-import { Transaction, SavingBox, Commitment, FamilyMember } from './types';
+import { Transaction, SavingBox, Commitment, FamilyMember, Installment, FinancialGoal } from './types';
 
 /**
  * Sums the `amount` field across a list of items (transactions, commitments,
@@ -213,4 +213,140 @@ export function getPersonaInsight(
       };
     }
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 1 — BNPL Guardian
+//
+// Rates the household's total monthly Buy-Now-Pay-Later burden against
+// income using the debt-to-income guardrails commonly cited by consumer
+// finance regulators for short-term unsecured obligations: under 20% is
+// considered safe, 20–33% is a caution zone, 33%+ is a common distress
+// threshold. This turns installment tracking from passive record-keeping
+// into an active, proactive warning system — both a standing dashboard
+// status and a live pre-purchase check before a new plan is even saved.
+// ─────────────────────────────────────────────────────────────────────────
+
+export type BnplLevel = 'safe' | 'caution' | 'danger';
+
+export interface BnplGuardianStatus {
+  level: BnplLevel;
+  monthlyTotal: number;
+  ratioPct: number;
+  titleAr: string;
+  titleEn: string;
+  bodyAr: string;
+  bodyEn: string;
+}
+
+function bnplLevelFromRatio(ratioPct: number): BnplLevel {
+  if (ratioPct >= 33) return 'danger';
+  if (ratioPct >= 20) return 'caution';
+  return 'safe';
+}
+
+/** Standing dashboard/installments-screen status: where does the user sit RIGHT NOW. */
+export function getBnplGuardianStatus(installments: Installment[], monthlyIncome: number): BnplGuardianStatus {
+  const active = installments.filter(i => i.remainingPayments > 0);
+  const monthlyTotal = active.reduce((s, i) => s + i.monthlyPayment, 0);
+  const ratioPct = monthlyIncome > 0 ? Math.round((monthlyTotal / monthlyIncome) * 100) : (monthlyTotal > 0 ? 100 : 0);
+  const level = bnplLevelFromRatio(ratioPct);
+
+  const copy: Record<BnplLevel, { titleAr: string; titleEn: string; bodyAr: string; bodyEn: string }> = {
+    safe: {
+      titleAr: 'حارس الدفع الآجل: وضع آمن',
+      titleEn: 'BNPL Guardian: Safe',
+      bodyAr: active.length === 0
+        ? 'لا توجد خطط دفع آجل نشطة حالياً.'
+        : `أقساطك الشهرية النشطة تمثل ${ratioPct}% من راتبك — ضمن الحد الآمن (أقل من 20%).`,
+      bodyEn: active.length === 0
+        ? 'No active pay-later plans right now.'
+        : `Your active monthly installments are ${ratioPct}% of your salary — within the safe zone (under 20%).`,
+    },
+    caution: {
+      titleAr: 'حارس الدفع الآجل: تنبيه',
+      titleEn: 'BNPL Guardian: Caution',
+      bodyAr: `أقساطك الشهرية النشطة تمثل ${ratioPct}% من راتبك — تجاوزت 20%. فكّر مرتين قبل أي خطة جديدة.`,
+      bodyEn: `Your active monthly installments are ${ratioPct}% of your salary — above the 20% caution line. Think twice before a new plan.`,
+    },
+    danger: {
+      titleAr: 'حارس الدفع الآجل: خطر',
+      titleEn: 'BNPL Guardian: Danger',
+      bodyAr: `أقساطك الشهرية النشطة تمثل ${ratioPct}% من راتبك — تجاوزت 33%، وهي عتبة تعثّر مالي شائعة. تجنّب أي التزام جديد الآن.`,
+      bodyEn: `Your active monthly installments are ${ratioPct}% of your salary — over the common 33% distress threshold. Avoid any new plan right now.`,
+    },
+  };
+
+  return { level, monthlyTotal, ratioPct, ...copy[level] };
+}
+
+/**
+ * Pre-purchase check: projects the Guardian ratio if ONE MORE monthly
+ * payment were added on top of existing active plans — so the warning
+ * fires while the user is still filling the "add installment" form, before
+ * the commitment is ever saved.
+ */
+export function projectBnplRatio(
+  installments: Installment[],
+  extraMonthlyPayment: number,
+  monthlyIncome: number
+): { level: BnplLevel; projectedRatioPct: number } {
+  const active = installments.filter(i => i.remainingPayments > 0);
+  const currentTotal = active.reduce((s, i) => s + i.monthlyPayment, 0);
+  const projectedTotal = currentTotal + Math.max(0, extraMonthlyPayment);
+  const projectedRatioPct = monthlyIncome > 0
+    ? Math.round((projectedTotal / monthlyIncome) * 100)
+    : (projectedTotal > 0 ? 100 : 0);
+  return { level: bnplLevelFromRatio(projectedRatioPct), projectedRatioPct };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 1 — Zakat Box
+//
+// Estimates Zakat al-Mal due on the user's tracked SAVINGS (FinancialGoal
+// balances — the closest thing this app models to "held wealth"; SavingBox
+// entries are spending envelopes/budgets, not savings, so they're
+// intentionally excluded). Nisab (the minimum-wealth threshold, traditionally
+// 85g of gold) is approximated per currency since the app has no live gold
+// price feed. This is explicitly labeled an ESTIMATE, not a religious
+// ruling — it assumes the balance has been held a full lunar year and
+// ignores debts owed, which a Sharia-accurate calculation requires.
+// ─────────────────────────────────────────────────────────────────────────
+
+const ZAKAT_NISAB_BY_CURRENCY: Record<string, number> = {
+  SAR: 17400, USD: 4650, EUR: 4300, GBP: 3700, AED: 17100, EGP: 145000,
+};
+const ZAKAT_RATE = 0.025; // 2.5% — the standard rate for Zakat al-Mal
+
+export interface ZakatEstimate {
+  eligible: boolean;
+  totalSavings: number;
+  nisab: number;
+  suggestedAmount: number;
+  titleAr: string;
+  titleEn: string;
+  bodyAr: string;
+  bodyEn: string;
+}
+
+export function getZakatEstimate(goals: FinancialGoal[], currencyCode: string): ZakatEstimate {
+  const totalSavings = goals.filter(g => g.id !== 'zakat-box').reduce((s, g) => s + g.current, 0);
+  const nisab = ZAKAT_NISAB_BY_CURRENCY[currencyCode] ?? ZAKAT_NISAB_BY_CURRENCY.SAR;
+  const eligible = totalSavings >= nisab;
+  const suggestedAmount = eligible ? Math.round(totalSavings * ZAKAT_RATE * 100) / 100 : 0;
+
+  return {
+    eligible,
+    totalSavings,
+    nisab,
+    suggestedAmount,
+    titleAr: 'تقدير الزكاة',
+    titleEn: 'Zakat Estimate',
+    bodyAr: eligible
+      ? `مدخراتك المتتبعة (${formatMoney(totalSavings, 'ar', currencyCode)}) تجاوزت النصاب التقديري (${formatMoney(nisab, 'ar', currencyCode)}). زكاة تقديرية بنسبة 2.5%: ${formatMoney(suggestedAmount, 'ar', currencyCode)}. هذا تقدير مبسّط وليس فتوى — راجع حاسبة زكاة معتمدة قبل الدفع.`
+      : `مدخراتك المتتبعة (${formatMoney(totalSavings, 'ar', currencyCode)}) لم تبلغ النصاب التقديري بعد (${formatMoney(nisab, 'ar', currencyCode)}) — لا زكاة مستحقة حالياً حسب هذا التقدير.`,
+    bodyEn: eligible
+      ? `Your tracked savings (${formatMoney(totalSavings, 'en', currencyCode)}) exceed the estimated nisab (${formatMoney(nisab, 'en', currencyCode)}). Estimated Zakat at 2.5%: ${formatMoney(suggestedAmount, 'en', currencyCode)}. This is a simplified estimate, not a religious ruling — verify with a certified Zakat calculator before paying.`
+      : `Your tracked savings (${formatMoney(totalSavings, 'en', currencyCode)}) haven't reached the estimated nisab yet (${formatMoney(nisab, 'en', currencyCode)}) — no Zakat is due on this estimate right now.`,
+  };
 }

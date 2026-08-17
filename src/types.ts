@@ -86,6 +86,10 @@ export interface Installment {
   monthlyPayment: number;
   paidThisCycle?: boolean;
   linkedTxId?: string;
+  // Phase 1 — BNPL Guardian: which pay-later provider this plan is with,
+  // e.g. 'tabby' | 'tamara' | 'klarna' | 'afterpay' | 'other'. Optional so
+  // existing saved installments (pre-Phase 1) remain valid without migration.
+  providerId?: string;
 }
 
 export interface FamilyMember {

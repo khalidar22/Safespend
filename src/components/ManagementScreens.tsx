@@ -35,8 +35,9 @@ import {
   FamilyMember, 
   FinancialGoal 
 } from '../types';
-import { formatMoney, getCycleBounds, sumAmounts } from '../utils';
+import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, projectBnplRatio, getZakatEstimate } from '../utils';
 import { CURRENCIES, getCurrency } from '../currencies';
+import { getProvidersForCurrency, getProvider } from '../bnplProviders';
 
 interface ManagementScreensProps {
   screenId: ScreenId;
@@ -148,6 +149,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   const [instTitle, setInstTitle] = useState('');
   const [instTotal, setInstTotal] = useState<number | ''>('');
   const [instPayments, setInstPayments] = useState<number | ''>(4);
+  const [instProviderId, setInstProviderId] = useState<string>('other');
   const [installmentToDelete, setInstallmentToDelete] = useState<Installment | null>(null);
 
   const handleStartAddInstallment = () => {
@@ -155,6 +157,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     setInstTitle('');
     setInstTotal('');
     setInstPayments(4);
+    setInstProviderId('other');
     setShowInstallmentForm(true);
   };
 
@@ -163,6 +166,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     setInstTitle(isAr ? inst.titleAr : inst.titleEn);
     setInstTotal(inst.total);
     setInstPayments(inst.totalPayments);
+    setInstProviderId(inst.providerId || 'other');
     setShowInstallmentForm(true);
   };
 
@@ -198,6 +202,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
           remainingPayments: newRemaining,
           paidAmount: newPaidAmount,
           monthlyPayment,
+          providerId: instProviderId,
         };
       }));
 
@@ -220,6 +225,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
         totalPayments: Number(instPayments),
         monthlyPayment,
         paidThisCycle: false,
+        providerId: instProviderId,
       };
       setInstallments(prev => [newInstallment, ...prev]);
     }
@@ -435,6 +441,22 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   // Screen 14: Pay later & installments (Tabby/Tamara manager)
   if (screenId === 'installments') {
     const totalInstallmentDebt = installments.reduce((acc, inst) => acc + (inst.total - inst.paidAmount), 0);
+    const guardianStatus = getBnplGuardianStatus(installments, userSalary);
+    const availableProviders = getProvidersForCurrency(currency);
+    const projectedMonthlyPayment = (instTotal !== '' && instPayments !== '' && Number(instPayments) > 0)
+      ? Math.round((Number(instTotal) / Number(instPayments)) * 100) / 100
+      : 0;
+    // When editing, don't double-count the plan's OWN current payment in the projection.
+    const guardianProjection = projectBnplRatio(
+      editingInstallmentId ? installments.filter(i => i.id !== editingInstallmentId) : installments,
+      projectedMonthlyPayment,
+      userSalary
+    );
+    const guardianColors: Record<string, { border: string; text: string; bg: string }> = {
+      safe: { border: 'border-emerald-500/30', text: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+      caution: { border: 'border-amber-500/40', text: 'text-amber-400', bg: 'bg-amber-500/10' },
+      danger: { border: 'border-rose-500/40', text: 'text-rose-400', bg: 'bg-rose-500/10' },
+    };
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto pb-24" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-6">
@@ -455,6 +477,19 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
           <p className="text-[10px] text-slate-400 mt-2">
             {isAr ? "موزعة على خدمات الدفع الآجل وبطاقات الائتمان" : "Active plans spread across pay-later services and credit cards"}
           </p>
+        </div>
+
+        {/* Phase 1 — BNPL Guardian: standing status of total monthly pay-later burden vs. salary */}
+        <div className={`p-3.5 rounded-2xl border mb-5 flex items-start gap-2.5 ${guardianColors[guardianStatus.level].border} ${guardianColors[guardianStatus.level].bg}`}>
+          <Shield size={16} className={`mt-0.5 shrink-0 ${guardianColors[guardianStatus.level].text}`} />
+          <div>
+            <h4 className={`text-[11px] font-bold mb-1 ${guardianColors[guardianStatus.level].text}`}>
+              {isAr ? guardianStatus.titleAr : guardianStatus.titleEn}
+            </h4>
+            <p className="text-[10px] text-slate-300 leading-relaxed">
+              {isAr ? guardianStatus.bodyAr : guardianStatus.bodyEn}
+            </p>
+          </div>
         </div>
 
         {/* Add / edit installment trigger */}
@@ -514,6 +549,39 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                   : `Calculated monthly payment: ${formatMoney(Math.round((Number(instTotal) / Number(instPayments)) * 100) / 100, lang, currency)}`}
               </p>
             )}
+
+            {/* Phase 1 — BNPL Guardian: pick the actual provider (filtered to what operates in the user's currency) */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[9px] text-emerald-500/80 font-bold px-1">
+                {isAr ? "جهة الدفع الآجل" : "Pay-later provider"}
+              </span>
+              <select
+                value={instProviderId}
+                onChange={e => setInstProviderId(e.target.value)}
+                className="bg-[#030d0a] border border-emerald-950 px-3 py-2 text-xs rounded-xl text-white"
+              >
+                {availableProviders.map(p => (
+                  <option key={p.id} value={p.id}>{isAr ? p.nameAr : p.nameEn}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Phase 1 — BNPL Guardian: proactive warning BEFORE this plan is saved, not after */}
+            {projectedMonthlyPayment > 0 && guardianProjection.level !== 'safe' && (
+              <div className={`p-2.5 rounded-xl border flex items-start gap-2 ${guardianColors[guardianProjection.level].border} ${guardianColors[guardianProjection.level].bg}`}>
+                <AlertTriangle size={13} className={`mt-0.5 shrink-0 ${guardianColors[guardianProjection.level].text}`} />
+                <p className={`text-[10px] leading-relaxed ${guardianColors[guardianProjection.level].text}`}>
+                  {guardianProjection.level === 'danger'
+                    ? (isAr
+                        ? `تحذير: إضافة هذا القسط سترفع إجمالي أقساطك الشهرية إلى ${guardianProjection.projectedRatioPct}% من راتبك — فوق عتبة الخطر (33%). يُنصح بعدم المتابعة.`
+                        : `Warning: adding this plan would push your total monthly installments to ${guardianProjection.projectedRatioPct}% of your salary — past the 33% danger line. Proceeding is not advised.`)
+                    : (isAr
+                        ? `تنبيه: إضافة هذا القسط سترفع إجمالي أقساطك الشهرية إلى ${guardianProjection.projectedRatioPct}% من راتبك — فوق حد الأمان (20%).`
+                        : `Caution: adding this plan would push your total monthly installments to ${guardianProjection.projectedRatioPct}% of your salary — above the 20% safe line.`)}
+                </p>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-1.5 mt-1">
               <button type="submit" className="py-2 bg-emerald-500 text-slate-950 text-xs font-bold rounded-xl">
                 {isAr ? (editingInstallmentId ? "حفظ التعديل" : "إضافة") : (editingInstallmentId ? "Save" : "Add")}
@@ -533,7 +601,17 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
               <div key={inst.id} className={`bg-[#051613] border rounded-2xl p-4 flex flex-col shadow-sm ${isCompleted ? 'border-emerald-500/30 opacity-70' : 'border-emerald-950'}`}>
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <h4 className="text-xs font-bold text-slate-100">{isAr ? inst.titleAr : inst.titleEn}</h4>
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="text-xs font-bold text-slate-100">{isAr ? inst.titleAr : inst.titleEn}</h4>
+                      {inst.providerId && inst.providerId !== 'other' && getProvider(inst.providerId) && (
+                        <span
+                          className="text-[8px] font-bold px-1.5 py-0.5 rounded-full border"
+                          style={{ color: getProvider(inst.providerId)!.color, borderColor: `${getProvider(inst.providerId)!.color}55` }}
+                        >
+                          {isAr ? getProvider(inst.providerId)!.nameAr : getProvider(inst.providerId)!.nameEn}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[9px] text-slate-400">
                       {isAr ? `القسط الشهري: ${formatMoney(inst.monthlyPayment, lang, currency)}` : `Monthly bill: ${formatMoney(inst.monthlyPayment, lang, currency)}`}
                     </span>
@@ -1195,6 +1273,45 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
           </button>
           <h2 className="text-base font-bold text-white">{isAr ? "الأهداف المالية الذكية" : "Financial Goals Tracker"}</h2>
         </div>
+
+        {/* Phase 1 — Zakat Box: estimate + one-tap creation of a savings goal to cover it */}
+        {(() => {
+          const zakat = getZakatEstimate(goals, currency);
+          const hasZakatGoal = goals.some(g => g.id === 'zakat-box');
+          if (!zakat.eligible && !hasZakatGoal) return null;
+          return (
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-[#1a1206] to-[#0a0603] border border-amber-800/50 mb-4">
+              <div className="flex items-center gap-2 mb-1.5">
+                <PiggyBank size={14} className="text-amber-400" />
+                <span className="text-[11px] font-bold text-amber-300">{isAr ? zakat.titleAr : zakat.titleEn}</span>
+              </div>
+              <p className="text-[10px] text-slate-300 leading-relaxed mb-2">
+                {isAr ? zakat.bodyAr : zakat.bodyEn}
+              </p>
+              {zakat.eligible && !hasZakatGoal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const zakatGoal: FinancialGoal = {
+                      id: 'zakat-box',
+                      titleAr: 'صندوق الزكاة',
+                      titleEn: 'Zakat Box',
+                      target: zakat.suggestedAmount,
+                      current: 0,
+                      color: '#d4af37',
+                    };
+                    setGoals(prev => [...prev, zakatGoal]);
+                  }}
+                  className="w-full py-2 bg-amber-500 text-slate-950 text-[10px] font-bold rounded-xl"
+                >
+                  {isAr
+                    ? `أنشئ صندوق ادخار للزكاة (${formatMoney(zakat.suggestedAmount, lang, currency)})`
+                    : `Create Zakat savings box (${formatMoney(zakat.suggestedAmount, lang, currency)})`}
+                </button>
+              )}
+            </div>
+          );
+        })()}
 
         <div className="flex flex-col gap-3.5 mb-4">
           {goals.map((g) => {
