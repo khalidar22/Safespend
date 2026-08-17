@@ -62,6 +62,8 @@ interface ManagementScreensProps {
   setLinkedBankAccounts: React.Dispatch<React.SetStateAction<LinkedBankAccount[]>>;
   kidsCards: KidsCard[];
   setKidsCards: React.Dispatch<React.SetStateAction<KidsCard[]>>;
+  isPremium: boolean;
+  setIsPremium: React.Dispatch<React.SetStateAction<boolean>>;
   showBalances: boolean;
   toggleShowBalances: () => void;
   langToggle: () => void;
@@ -100,6 +102,8 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   setLinkedBankAccounts,
   kidsCards,
   setKidsCards,
+  isPremium,
+  setIsPremium,
   showBalances,
   toggleShowBalances,
   langToggle,
@@ -129,6 +133,12 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   // Currency selection states
   const [showCurrencyPicker, setShowCurrencyPicker] = useState<boolean>(false);
   const [currencySearch, setCurrencySearch] = useState<string>('');
+
+  // Phase 4b — Premium screen states. No real payment processor is connected
+  // yet, so "subscribing" only flips a local flag after an explicit demo
+  // notice — it must never look like a real charge went through.
+  const [showSubscribeConfirm, setShowSubscribeConfirm] = useState<'monthly' | 'annual' | null>(null);
+  const [showCancelPremiumConfirm, setShowCancelPremiumConfirm] = useState<boolean>(false);
 
   // Family Screen States
   const [showAddMemberPopup, setShowAddMemberPopup] = useState<boolean>(false);
@@ -364,6 +374,45 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   const handleConnectDemoAccount = () => {
     const account = createDemoLinkedAccount(linkedBankAccounts.length + 1, lang);
     setLinkedBankAccounts(prev => [...prev, account]);
+  };
+
+  // Phase 4b — Premium-gated Zakat report export. Real, working export (not a
+  // mockup): builds a plain-text summary from the user's actual goals data
+  // and triggers a real browser download. Gating on isPremium is the whole
+  // point of preparing the premium flow ahead of a real payment processor.
+  const handleExportZakatReport = () => {
+    const zakat = getZakatEstimate(goals, currency);
+    const zakatGoal = goals.find(g => g.id === 'zakat-box');
+    const lines = isAr
+      ? [
+          `تقرير الزكاة السنوي — SafeSpend`,
+          `التاريخ: ${new Date().toLocaleDateString('ar-SA')}`,
+          ``,
+          `النصاب التقديري وحالة الأهلية: ${zakat.eligible ? 'تجاوزت النصاب التقديري' : 'لم تتجاوز النصاب التقديري بعد'}`,
+          `الزكاة المقترحة (2.5%): ${formatMoney(zakat.suggestedAmount, lang, currency)}`,
+          zakatGoal ? `رصيد صندوق الزكاة الحالي: ${formatMoney(zakatGoal.current, lang, currency)} من أصل ${formatMoney(zakatGoal.target, lang, currency)}` : `لا يوجد صندوق زكاة منشأ بعد`,
+          ``,
+          `هذا تقدير آلي لأغراض التنظيم الشخصي فقط، وليس فتوى شرعية — راجع جهة شرعية موثوقة لحساب الزكاة الدقيق.`,
+        ]
+      : [
+          `Annual Zakat Report — SafeSpend`,
+          `Date: ${new Date().toLocaleDateString('en-US')}`,
+          ``,
+          `Nisab eligibility: ${zakat.eligible ? 'Above estimated nisab threshold' : 'Not yet above estimated nisab threshold'}`,
+          `Suggested Zakat (2.5%): ${formatMoney(zakat.suggestedAmount, lang, currency)}`,
+          zakatGoal ? `Current Zakat box balance: ${formatMoney(zakatGoal.current, lang, currency)} of ${formatMoney(zakatGoal.target, lang, currency)}` : `No Zakat box created yet`,
+          ``,
+          `This is an automated estimate for personal organization only, not a religious ruling — consult a trusted Shariah authority for precise Zakat calculation.`,
+        ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `SafeSpend-Zakat-Report-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   // Phase 3 — Kids Card demo state + handlers
@@ -1519,6 +1568,26 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                     : `Create Zakat savings box (${formatMoney(zakat.suggestedAmount, lang, currency)})`}
                 </button>
               )}
+              {/* Phase 4b — premium-gated annual Zakat report export */}
+              {isPremium ? (
+                <button
+                  type="button"
+                  onClick={handleExportZakatReport}
+                  className="w-full mt-2 py-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold rounded-xl flex items-center justify-center gap-1.5"
+                >
+                  <Award size={12} />
+                  {isAr ? "تصدير تقرير الزكاة السنوي (مميز)" : "Export annual Zakat report (Premium)"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('premium')}
+                  className="w-full mt-2 py-2 bg-[#0a0603] border border-amber-900/50 text-amber-500/70 text-[10px] font-bold rounded-xl flex items-center justify-center gap-1.5"
+                >
+                  <Lock size={11} />
+                  {isAr ? "تصدير تقرير الزكاة السنوي — ميزة مميزة" : "Export annual Zakat report — Premium feature"}
+                </button>
+              )}
             </div>
           );
         })()}
@@ -2277,6 +2346,11 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-amber-500">{isAr ? "الاشتراك المميز" : "SafeSpend Premium"}</h2>
+          {isPremium && (
+            <span className="mr-auto text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+              {isAr ? "نشط (تجريبي)" : "Active (Demo)"}
+            </span>
+          )}
         </div>
 
         {/* Big crown logo */}
@@ -2285,9 +2359,19 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
             <Award size={40} className="text-amber-500" />
             <span className="absolute -top-1 -right-1 bg-amber-500 text-[8px] font-bold text-[#030d0a] px-1.5 py-0.5 rounded-full uppercase">VIP</span>
           </div>
-          
+
           <h3 className="text-lg font-extrabold text-white mt-4 tracking-tight">SafeSpend Premium</h3>
           <p className="text-xs text-amber-400 mt-1">{isAr ? "حماية أعمق من فخ الأقساط، بأدوات ذكية" : "Deeper protection from the installment trap"}</p>
+        </div>
+
+        {/* Demo-mode notice — no real payment processor is connected yet */}
+        <div className="mb-5 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 text-[10px] text-amber-300/90 leading-relaxed flex items-start gap-2">
+          <AlertTriangle size={13} className="text-amber-500 shrink-0 mt-0.5" />
+          <span>
+            {isAr
+              ? "وضع تجريبي بالكامل — هذا التصميم فقط، ولا يتصل بأي معالج دفع حقيقي بعد. الاشتراك هنا لا يخصم أي مبلغ فعلي، وهذا قرار عمل مستقبلي منفصل."
+              : "Fully demo mode — this is the design only, with no real payment processor connected yet. Subscribing here never charges real money; connecting one is a separate future business step."}
+          </span>
         </div>
 
         {/* Feature grid list */}
@@ -2333,31 +2417,88 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
           </div>
         </div>
 
-        {/* Plan tiers */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-center flex flex-col justify-between">
-            <span className="text-[10px] text-slate-400 font-bold uppercase">{isAr ? "شهري" : "Monthly"}</span>
-            <div className="my-2">
-              <span className="text-xl font-extrabold text-white font-display">29</span>
-              <span className="text-[10px] text-amber-500 font-bold block">{isAr ? "شهرياً" : "/month"}</span>
+        {/* Plan tiers, or active-subscription panel */}
+        {!isPremium ? (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20 text-center flex flex-col justify-between">
+              <span className="text-[10px] text-slate-400 font-bold uppercase">{isAr ? "شهري" : "Monthly"}</span>
+              <div className="my-2">
+                <span className="text-xl font-extrabold text-white font-display">29</span>
+                <span className="text-[10px] text-amber-500 font-bold block">{isAr ? "شهرياً" : "/month"}</span>
+              </div>
+              <button type="button" onClick={() => setShowSubscribeConfirm('monthly')} className="w-full py-1.5 bg-amber-500 text-[#030d0a] text-[10px] font-bold rounded-lg uppercase tracking-wider">{isAr ? "اشترك" : "Subscribe"}</button>
             </div>
-            <button className="w-full py-1.5 bg-amber-500 text-[#030d0a] text-[10px] font-bold rounded-lg uppercase tracking-wider">{isAr ? "اشترك" : "Subscribe"}</button>
-          </div>
 
-          <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-500/15 to-[#051613] border-2 border-amber-500 text-center flex flex-col justify-between relative shadow-lg">
-            <span className="absolute -top-2.5 left-1/2 transform -translate-x-1/2 bg-amber-500 text-[8px] font-extrabold text-[#030d0a] px-2 py-0.5 rounded-full uppercase tracking-widest">{isAr ? "الأكثر توفيراً" : "Best Value"}</span>
-            <span className="text-[10px] text-slate-300 font-bold uppercase mt-1">{isAr ? "سنوي" : "Annual"}</span>
-            <div className="my-2">
-              <span className="text-2xl font-extrabold text-white font-display">249</span>
-              <span className="text-[10px] text-amber-500 font-bold block">{isAr ? "سنويًا" : "/year"}</span>
+            <div className="p-4 rounded-2xl bg-gradient-to-b from-amber-500/15 to-[#051613] border-2 border-amber-500 text-center flex flex-col justify-between relative shadow-lg">
+              <span className="absolute -top-2.5 left-1/2 transform -translate-x-1/2 bg-amber-500 text-[8px] font-extrabold text-[#030d0a] px-2 py-0.5 rounded-full uppercase tracking-widest">{isAr ? "الأكثر توفيراً" : "Best Value"}</span>
+              <span className="text-[10px] text-slate-300 font-bold uppercase mt-1">{isAr ? "سنوي" : "Annual"}</span>
+              <div className="my-2">
+                <span className="text-2xl font-extrabold text-white font-display">249</span>
+                <span className="text-[10px] text-amber-500 font-bold block">{isAr ? "سنويًا" : "/year"}</span>
+              </div>
+              <button type="button" onClick={() => setShowSubscribeConfirm('annual')} className="w-full py-2 bg-amber-500 text-[#030d0a] text-[10px] font-bold rounded-lg uppercase tracking-wider glow-amber">{isAr ? "اشترك ووفر" : "Save & Subscribe"}</button>
             </div>
-            <button className="w-full py-2 bg-amber-500 text-[#030d0a] text-[10px] font-bold rounded-lg uppercase tracking-wider glow-amber">{isAr ? "اشترك ووفر" : "Save & Subscribe"}</button>
           </div>
-        </div>
+        ) : (
+          <div className="p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/30 text-center flex flex-col items-center gap-2">
+            <CheckCircle size={22} className="text-emerald-400" />
+            <span className="text-xs font-bold text-emerald-300">{isAr ? "اشتراكك المميز مفعّل" : "Your Premium is active"}</span>
+            <p className="text-[10px] text-slate-400">{isAr ? "تفعيل تجريبي محلي — لا يوجد خصم فعلي حالياً." : "Local demo activation — nothing has actually been charged."}</p>
+            <button type="button" onClick={() => setShowCancelPremiumConfirm(true)} className="mt-1 text-[10px] font-bold text-rose-400 hover:text-rose-300 underline">
+              {isAr ? "إلغاء الاشتراك" : "Cancel subscription"}
+            </button>
+          </div>
+        )}
 
         <div className="text-[10px] text-center text-slate-400 mt-4 leading-normal">
-          {isAr ? "تجربة مجانية لمدة 14 يوماً. يمكنك الإلغاء في أي وقت من متجر التطبيقات." : "14-day free trial. Cancel anytime via Google Play or App Store."}
+          {isAr ? "وضع معاينة محلي بالكامل حتى الآن — لا يوجد معالج دفع حقيقي متصل، فلا فوترة فعلية ولا حاجة لإلغاء عبر متجر تطبيقات." : "Fully local preview mode for now — no real payment processor is connected, so there's no real billing and nothing to cancel via an app store."}
         </div>
+
+        {showSubscribeConfirm && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-6" onClick={() => setShowSubscribeConfirm(null)}>
+            <div className="bg-[#051411] border border-amber-500/30 rounded-2xl p-5 max-w-xs w-full flex flex-col gap-3" onClick={e => e.stopPropagation()}>
+              <h4 className="text-xs font-bold text-amber-400">{isAr ? "تفعيل تجريبي فقط" : "Demo activation only"}</h4>
+              <p className="text-[10px] text-slate-300 leading-relaxed">
+                {isAr
+                  ? "لا يوجد معالج دفع حقيقي متصل بعد، فلن يُخصم منك أي مبلغ. سيُفعَّل الاشتراك محلياً للمعاينة فقط."
+                  : "No real payment processor is connected yet, so nothing will be charged. This activates the subscription locally, for preview only."}
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => { setIsPremium(true); setShowSubscribeConfirm(null); }}
+                  className="py-2 bg-amber-500 text-[#030d0a] text-xs font-bold rounded-xl"
+                >
+                  {isAr ? "تفعيل تجريبي" : "Activate demo"}
+                </button>
+                <button type="button" onClick={() => setShowSubscribeConfirm(null)} className="py-2 bg-[#020d0a] border border-emerald-950 text-slate-400 text-xs font-bold rounded-xl">
+                  {isAr ? "تراجع" : "Cancel"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showCancelPremiumConfirm && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-6" onClick={() => setShowCancelPremiumConfirm(false)}>
+            <div className="bg-[#051411] border border-rose-500/30 rounded-2xl p-5 max-w-xs w-full flex flex-col gap-3" onClick={e => e.stopPropagation()}>
+              <h4 className="text-xs font-bold text-rose-400">{isAr ? "إلغاء الاشتراك؟" : "Cancel subscription?"}</h4>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => { setIsPremium(false); setShowCancelPremiumConfirm(false); }}
+                  className="py-2 bg-rose-500 text-white text-xs font-bold rounded-xl"
+                >
+                  {isAr ? "إلغاء" : "Cancel it"}
+                </button>
+                <button type="button" onClick={() => setShowCancelPremiumConfirm(false)} className="py-2 bg-[#020d0a] border border-emerald-950 text-slate-400 text-xs font-bold rounded-xl">
+                  {isAr ? "تراجع" : "Back"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="h-24 shrink-0" />
       </div>
     );

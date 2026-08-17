@@ -137,6 +137,10 @@ export default function App() {
   const [billSplits, setBillSplits] = useState<BillSplit[]>(savedState?.billSplits || []);
   const [linkedBankAccounts, setLinkedBankAccounts] = useState<LinkedBankAccount[]>(savedState?.linkedBankAccounts || []);
   const [kidsCards, setKidsCards] = useState<KidsCard[]>(savedState?.kidsCards || []);
+  // Phase 4b — Premium subscription state. This is a LOCAL activation flag only:
+  // no real payment processor is connected yet, so subscribing never charges
+  // real money. The UI must always say so explicitly when activating.
+  const [isPremium, setIsPremium] = useState<boolean>(savedState?.isPremium || false);
   const [selectedPersona, setSelectedPersona] = useState<string | null>(savedState?.selectedPersona || 'persona-3'); // Family Style by default
   
   // Calculations
@@ -216,6 +220,7 @@ export default function App() {
       billSplits,
       linkedBankAccounts,
       kidsCards,
+      isPremium,
       microThresholdPct,
       lastSeenAlertState,
       lastDailyCalcDate,
@@ -245,6 +250,7 @@ export default function App() {
     billSplits,
     linkedBankAccounts,
     kidsCards,
+    isPremium,
     microThresholdPct,
     lastSeenAlertState,
     lastDailyCalcDate,
@@ -577,7 +583,8 @@ export default function App() {
     if (imported.billSplits !== undefined) setBillSplits(imported.billSplits);
     if (imported.linkedBankAccounts !== undefined) setLinkedBankAccounts(imported.linkedBankAccounts);
     if (imported.kidsCards !== undefined) setKidsCards(imported.kidsCards);
-    
+    if (imported.isPremium !== undefined) setIsPremium(imported.isPremium);
+
     setActiveScreen('dashboard');
   };
 
@@ -807,6 +814,8 @@ export default function App() {
                   setLinkedBankAccounts={setLinkedBankAccounts}
                   kidsCards={kidsCards}
                   setKidsCards={setKidsCards}
+                  isPremium={isPremium}
+                  setIsPremium={setIsPremium}
                   showBalances={showBalances}
                   toggleShowBalances={() => setShowBalances(!showBalances)}
                   langToggle={() => setLang(prev => prev === 'ar' ? 'en' : 'ar')}
