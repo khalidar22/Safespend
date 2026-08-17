@@ -71,21 +71,21 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
           
           <div className="flex flex-col items-center gap-1 mt-1">
             <h2 className="text-xl font-bold text-emerald-400">
-              Safe Spending
+              Debt-Safe. Shariah-Aware.
             </h2>
             <div className="w-8 h-[1px] bg-emerald-500/30"></div>
             <h2 className="text-xs font-semibold text-emerald-500/70 tracking-widest uppercase">
-              الصرف الآمن
+              يحميك من فخ الأقساط
             </h2>
           </div>
-          
+
           <div className="flex flex-col gap-3 max-w-xs mt-6 text-center">
             <p className="text-sm text-slate-300 leading-relaxed font-medium">
-              Know how much you can spend safely today without impacting your commitments
+              The app that warns you before a Buy-Now-Pay-Later plan crosses your safe limit — and keeps your Zakat on track automatically
             </p>
             <div className="w-16 h-[1px] bg-emerald-950/80 mx-auto my-1"></div>
             <p className="text-xs text-slate-400 leading-relaxed" dir="rtl">
-              اعرف كم تستطيع أن تصرف اليوم بأمان دون التأثير على التزاماتك
+              يحذّرك قبل أن يتجاوز أي قسط دفع آجل حدك الآمن، ويحسب زكاتك تلقائياً — لست تطبيق ميزانية عام
             </p>
           </div>
         </div>
@@ -236,12 +236,12 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
           </div>
 
           <h2 className="text-xl font-bold text-white tracking-tight">
-            {isAr ? "اعرف كم تستطيع أن تصرف اليوم بأمان" : "Know how much you can spend safely today"}
+            {isAr ? "لا تقع في فخ الأقساط" : "Never fall into the installment trap"}
           </h2>
           <p className="text-xs text-slate-400 max-w-xs mt-3 leading-relaxed">
-            {isAr 
-              ? "مستشار مالي ذكي في جيبك يساعدك على تنظيم أموالك، تسديد التزاماتك دون قلق، وتوفير المتبقي لتحقيق أهدافك الحقيقية." 
-              : "An intelligent financial advisor in your pocket. It guides you to spend safely, cover commitments without stress, and save for your true life dreams."}
+            {isAr
+              ? "حارس الدفع الآجل يحذّرك قبل أي قسط يتجاوز حدك الآمن، وصندوق الزكاة يحسب التزامك الشرعي تلقائياً — تطبيق مبني حول حمايتك، لا مجرد جدول مصروفات."
+              : "BNPL Guardian warns you before any installment crosses your safe limit, and the built-in Zakat box tracks your religious obligation automatically — built around protecting you, not just another spending tracker."}
           </p>
         </div>
 
