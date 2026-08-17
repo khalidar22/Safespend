@@ -1377,7 +1377,7 @@ export default function App() {
       {/* Elegant minimalist footer */}
       <footer className="py-4 text-center text-xs text-slate-600 border-t border-emerald-950/20 bg-[#020706] shrink-0">
         <div>
-          SafeSpend &copy; {new Date().getFullYear()} • {isAr ? "الصرف الآمن لحياة مالية مستقرة" : "Safe Spending for a Stable Financial Life"}
+          SafeSpend &copy; {new Date().getFullYear()} • {isAr ? "يحميك من فخ الأقساط، بوعي شرعي" : "Debt-safe budgeting, Shariah-aware"}
         </div>
         <div className="text-[10px] text-slate-700 mt-1">
           Developed to exactly duplicate the 19 detailed UI layouts utilizing React, Tailwind CSS, and Lucide icons.

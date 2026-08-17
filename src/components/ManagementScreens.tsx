@@ -2287,11 +2287,21 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
           </div>
           
           <h3 className="text-lg font-extrabold text-white mt-4 tracking-tight">SafeSpend Premium</h3>
-          <p className="text-xs text-amber-400 mt-1">{isAr ? "ارتقِ بإدارتك المالية إلى مستويات ذكية" : "Elevate your financial management"}</p>
+          <p className="text-xs text-amber-400 mt-1">{isAr ? "حماية أعمق من فخ الأقساط، بأدوات ذكية" : "Deeper protection from the installment trap"}</p>
         </div>
 
         {/* Feature grid list */}
         <div className="bg-[#051613] border border-amber-950/40 rounded-2xl p-4 flex flex-col gap-3 text-xs mb-5">
+          <div className="flex items-start gap-2.5">
+            <div className="w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500 shrink-0">
+              <Shield size={12} className="stroke-[3]" />
+            </div>
+            <div>
+              <span className="font-bold text-slate-200">{isAr ? "حارس دفع آجل متقدم + تقرير زكاة سنوي" : "Advanced BNPL Guardian + Annual Zakat Report"}</span>
+              <p className="text-[10px] text-slate-400 mt-0.5">{isAr ? "تنبيهات فورية عبر كل مزوّدي الدفع الآجل، وتقرير زكاة سنوي قابل للتصدير لحسابك الشرعي." : "Real-time alerts across every BNPL provider, plus an exportable annual Zakat report for your religious accounting."}</p>
+            </div>
+          </div>
+
           <div className="flex items-start gap-2.5">
             <div className="w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500 shrink-0">
               <Check size={12} className="stroke-[3]" />
