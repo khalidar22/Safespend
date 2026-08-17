@@ -36,9 +36,11 @@ import {
   FamilyMember,
   FinancialGoal,
   BillSplit,
-  SplitParticipant
+  SplitParticipant,
+  LinkedBankAccount,
+  KidsCard
 } from '../types';
-import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, projectBnplRatio, getZakatEstimate, computeEqualSplit, getTotalOwedToUser, buildSplitShareText } from '../utils';
+import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, projectBnplRatio, getZakatEstimate, computeEqualSplit, getTotalOwedToUser, buildSplitShareText, createDemoLinkedAccount, getLinkedAccountsTotal, createDemoKidsCard } from '../utils';
 import { CURRENCIES, getCurrency } from '../currencies';
 import { getProvidersForCurrency, getProvider } from '../bnplProviders';
 
@@ -56,6 +58,10 @@ interface ManagementScreensProps {
   setGoals: React.Dispatch<React.SetStateAction<FinancialGoal[]>>;
   billSplits: BillSplit[];
   setBillSplits: React.Dispatch<React.SetStateAction<BillSplit[]>>;
+  linkedBankAccounts: LinkedBankAccount[];
+  setLinkedBankAccounts: React.Dispatch<React.SetStateAction<LinkedBankAccount[]>>;
+  kidsCards: KidsCard[];
+  setKidsCards: React.Dispatch<React.SetStateAction<KidsCard[]>>;
   showBalances: boolean;
   toggleShowBalances: () => void;
   langToggle: () => void;
@@ -90,6 +96,10 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   setGoals,
   billSplits,
   setBillSplits,
+  linkedBankAccounts,
+  setLinkedBankAccounts,
+  kidsCards,
+  setKidsCards,
   showBalances,
   toggleShowBalances,
   langToggle,
@@ -346,6 +356,29 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
         setTimeout(() => setCopiedParticipantId(null), 1800);
       } catch { /* clipboard blocked — nothing more we can do silently */ }
     }
+  };
+
+  // Phase 3 — Open Banking demo state + handlers
+  const [accountToUnlink, setAccountToUnlink] = useState<LinkedBankAccount | null>(null);
+
+  const handleConnectDemoAccount = () => {
+    const account = createDemoLinkedAccount(linkedBankAccounts.length + 1, lang);
+    setLinkedBankAccounts(prev => [...prev, account]);
+  };
+
+  // Phase 3 — Kids Card demo state + handlers
+  const [cardLimitDrafts, setCardLimitDrafts] = useState<Record<string, number | ''>>({});
+
+  const handleCreateDemoCard = (familyMemberId: string) => {
+    const limit = Number(cardLimitDrafts[familyMemberId]) || 200;
+    const card = createDemoKidsCard(familyMemberId, limit);
+    setKidsCards(prev => [...prev, card]);
+  };
+  const handleToggleCardActive = (cardId: string) => {
+    setKidsCards(prev => prev.map(c => c.id === cardId ? { ...c, active: !c.active } : c));
+  };
+  const handleDeleteCard = (cardId: string) => {
+    setKidsCards(prev => prev.filter(c => c.id !== cardId));
   };
 
   // Transfer accumulated balance from one goal to another (keeps the money inside the goals system)
@@ -942,6 +975,67 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
               <Plus size={16} />
               <span>{isAr ? "إضافة فرد" : "Add Member"}</span>
             </button>
+
+            {/* Phase 3 — Kids Card, DEMO PREVIEW ONLY (see types.ts KidsCard comment) */}
+            <div className="mt-6">
+              <h3 className="text-xs font-bold text-white mb-1.5">{isAr ? "بطاقات الأبناء" : "Kids Cards"}</h3>
+              <div className="p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 mb-3 flex items-start gap-2">
+                <AlertTriangle size={13} className="mt-0.5 shrink-0 text-amber-400" />
+                <p className="text-[9px] text-amber-200 leading-relaxed">
+                  {isAr
+                    ? "وضع تجريبي — بطاقة معاينة تصميم فقط، بلا رقم أو رصيد حقيقي. الإصدار الفعلي يحتاج شراكة مع مزوّد إصدار بطاقات (Card-Issuing-as-a-Service) وبنك راعٍ، وهذا قرار عمل مستقل."
+                    : "Demo only — a design-preview card with no real number or balance. Real issuance needs a Card-Issuing-as-a-Service partner and a sponsor bank — a separate business decision."}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2.5">
+                {familyMembers.map((m) => {
+                  const card = kidsCards.find(c => c.familyMemberId === m.id);
+                  return (
+                    <div key={m.id} className="p-3 bg-[#051613] border border-emerald-950 rounded-xl">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[11px] font-bold text-slate-200">{isAr ? m.nameAr : m.nameEn}</span>
+                        {card && (
+                          <span className="text-[8px] font-bold px-2 py-0.5 rounded-full border border-amber-500/40 text-amber-400 bg-amber-500/10">
+                            {isAr ? "تجريبي" : "DEMO"}
+                          </span>
+                        )}
+                      </div>
+                      {card ? (
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-slate-400 font-mono">•••• {card.last4} — {isAr ? "حد الصرف:" : "Limit:"} {formatMoney(card.spendingLimit, lang, currency)}</span>
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => handleToggleCardActive(card.id)} className={`text-[9px] font-bold px-2 py-1 rounded-lg border ${card.active ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400' : 'bg-slate-800/40 border-slate-700 text-slate-400'}`}>
+                              {card.active ? (isAr ? "مفعّلة" : "Active") : (isAr ? "موقوفة" : "Paused")}
+                            </button>
+                            <button type="button" onClick={() => handleDeleteCard(card.id)} className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10">
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-1.5">
+                          <input
+                            type="number"
+                            value={cardLimitDrafts[m.id] ?? ''}
+                            onChange={e => setCardLimitDrafts(prev => ({ ...prev, [m.id]: e.target.value === '' ? '' : Number(e.target.value) }))}
+                            placeholder={isAr ? "حد الصرف الشهري (مثال: 200)" : "Monthly limit (e.g. 200)"}
+                            className="bg-[#030d0a] border border-emerald-950 px-3 py-1.5 text-[10px] rounded-lg text-white flex-1"
+                            min={1}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleCreateDemoCard(m.id)}
+                            className="px-3 py-1.5 bg-amber-500/90 text-slate-950 text-[10px] font-bold rounded-lg whitespace-nowrap"
+                          >
+                            {isAr ? "أنشئ بطاقة تجريبية" : "Create Demo Card"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </>
         )}
 
@@ -1814,6 +1908,108 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                   {isAr ? "احذف" : "Delete"}
                 </button>
                 <button type="button" onClick={() => setSplitToDelete(null)} className="py-2 bg-[#020d0a] border border-emerald-950 text-slate-400 text-xs font-bold rounded-xl">
+                  {isAr ? "تراجع" : "Cancel"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="h-24 shrink-0" />
+      </div>
+    );
+  }
+
+  // Phase 3 — Screen 20: Open Banking (DEMO PREVIEW ONLY — see types.ts LinkedBankAccount comment)
+  if (screenId === 'open_banking') {
+    const total = getLinkedAccountsTotal(linkedBankAccounts);
+    return (
+      <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto pb-24" dir={isAr ? 'rtl' : 'ltr'}>
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={() => onNavigate('dashboard')} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30">
+            {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          </button>
+          <h2 className="text-base font-bold text-white">{isAr ? "ربط الحسابات البنكية" : "Bank Linking"}</h2>
+        </div>
+
+        {/* Unmissable demo-mode banner — this is the whole point: never let this read as a real bank connection */}
+        <div className="p-3.5 rounded-2xl border border-amber-500/40 bg-amber-500/10 mb-5 flex items-start gap-2.5">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-400" />
+          <p className="text-[10px] text-amber-200 leading-relaxed">
+            {isAr
+              ? "وضع تجريبي بالكامل — هذي معاينة للتصميم فقط، وما تتصل بأي بنك حقيقي. الربط البنكي الفعلي يحتاج شراكة مع مزوّد بنكية مفتوحة مرخّص من ساما (مثل Lean Technologies أو Tarabut Gateway)، وهذا قرار عمل مستقل خارج نطاق البرمجة."
+              : "Fully simulated — this is a design preview only and connects to no real bank. Real linking requires partnering with a SAMA-licensed Open Banking enabler (e.g. Lean Technologies or Tarabut Gateway) — a separate business decision, not a coding task."}
+          </p>
+        </div>
+
+        <div className="p-4 rounded-2xl bg-gradient-to-br from-[#051a0f] to-[#020a04] border border-emerald-800/50 mb-5 text-center">
+          <span className="text-[9px] text-emerald-400 font-bold tracking-widest uppercase block mb-1">
+            {isAr ? "إجمالي الحسابات التجريبية المربوطة" : "Total Demo Accounts Linked"}
+          </span>
+          <div className="text-2xl font-extrabold text-white font-display">
+            {showBalances ? formatMoney(total, lang, currency) : '••••'}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleConnectDemoAccount}
+          className="mb-4 py-2.5 w-full border border-dashed border-emerald-800/50 hover:border-emerald-500 hover:bg-[#061d19]/20 transition-all text-emerald-400 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1"
+        >
+          <Plus size={13} />
+          <span>{isAr ? "اربط حساباً تجريبياً +" : "+ Connect a Demo Account"}</span>
+        </button>
+
+        <div className="flex flex-col gap-3">
+          {linkedBankAccounts.map((account) => (
+            <div key={account.id} className="bg-[#051613] border border-emerald-950 rounded-2xl p-4 flex flex-col shadow-sm">
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-100">{isAr ? account.labelAr : account.labelEn}</h4>
+                  <span className="text-[9px] text-slate-400">•••• {account.last4}</span>
+                </div>
+                <span className="text-[8px] font-bold px-2 py-0.5 rounded-full border border-amber-500/40 text-amber-400 bg-amber-500/10">
+                  {isAr ? "تجريبي" : "DEMO"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-[10px] text-slate-400 mt-2">
+                <span className="font-bold text-slate-200">
+                  {showBalances ? formatMoney(account.balance, lang, currency) : '••••'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAccountToUnlink(account)}
+                  className="text-[9px] font-bold text-rose-400 hover:text-rose-300"
+                >
+                  {isAr ? "فك الربط" : "Unlink"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {linkedBankAccounts.length === 0 && (
+          <p className="text-center text-[10px] text-slate-500 mt-6">
+            {isAr ? "لا توجد حسابات مربوطة بعد." : "No accounts linked yet."}
+          </p>
+        )}
+
+        {accountToUnlink && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-6" onClick={() => setAccountToUnlink(null)}>
+            <div className="bg-[#051411] border border-rose-500/30 rounded-2xl p-5 max-w-xs w-full flex flex-col gap-3" onClick={e => e.stopPropagation()}>
+              <h4 className="text-xs font-bold text-rose-400">{isAr ? "فك ربط الحساب؟" : "Unlink this account?"}</h4>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLinkedBankAccounts(prev => prev.filter(a => a.id !== accountToUnlink.id));
+                    setAccountToUnlink(null);
+                  }}
+                  className="py-2 bg-rose-500 text-white text-xs font-bold rounded-xl"
+                >
+                  {isAr ? "فك الربط" : "Unlink"}
+                </button>
+                <button type="button" onClick={() => setAccountToUnlink(null)} className="py-2 bg-[#020d0a] border border-emerald-950 text-slate-400 text-xs font-bold rounded-xl">
                   {isAr ? "تراجع" : "Cancel"}
                 </button>
               </div>

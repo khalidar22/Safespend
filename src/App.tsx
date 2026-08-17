@@ -41,7 +41,9 @@ import {
   Installment,
   FamilyMember,
   FinancialGoal,
-  BillSplit
+  BillSplit,
+  LinkedBankAccount,
+  KidsCard
 } from './types';
 import { 
   INITIAL_TRANSACTIONS, 
@@ -133,6 +135,8 @@ export default function App() {
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>(savedState?.familyMembers || []);
   const [goals, setGoals] = useState<FinancialGoal[]>(savedState?.goals || []);
   const [billSplits, setBillSplits] = useState<BillSplit[]>(savedState?.billSplits || []);
+  const [linkedBankAccounts, setLinkedBankAccounts] = useState<LinkedBankAccount[]>(savedState?.linkedBankAccounts || []);
+  const [kidsCards, setKidsCards] = useState<KidsCard[]>(savedState?.kidsCards || []);
   const [selectedPersona, setSelectedPersona] = useState<string | null>(savedState?.selectedPersona || 'persona-3'); // Family Style by default
   
   // Calculations
@@ -210,6 +214,8 @@ export default function App() {
       familyMembers,
       goals,
       billSplits,
+      linkedBankAccounts,
+      kidsCards,
       microThresholdPct,
       lastSeenAlertState,
       lastDailyCalcDate,
@@ -237,6 +243,8 @@ export default function App() {
     familyMembers,
     goals,
     billSplits,
+    linkedBankAccounts,
+    kidsCards,
     microThresholdPct,
     lastSeenAlertState,
     lastDailyCalcDate,
@@ -268,6 +276,8 @@ export default function App() {
           familyMembers,
           goals,
           billSplits,
+          linkedBankAccounts,
+          kidsCards,
           microThresholdPct,
           lastSeenAlertState,
           lastDailyCalcDate,
@@ -565,6 +575,8 @@ export default function App() {
     if (imported.familyMembers !== undefined) setFamilyMembers(imported.familyMembers);
     if (imported.goals !== undefined) setGoals(imported.goals);
     if (imported.billSplits !== undefined) setBillSplits(imported.billSplits);
+    if (imported.linkedBankAccounts !== undefined) setLinkedBankAccounts(imported.linkedBankAccounts);
+    if (imported.kidsCards !== undefined) setKidsCards(imported.kidsCards);
     
     setActiveScreen('dashboard');
   };
@@ -598,11 +610,16 @@ export default function App() {
     { id: 'leakage', num: 12, labelAr: 'كشف التسرب المالي', labelEn: 'Leakage Detector' },
     { id: 'upcoming', num: 13, labelAr: 'الالتزامات القادمة', labelEn: 'Upcoming Bills List' },
     { id: 'installments', num: 14, labelAr: 'الدفع لاحقاً والأقساط', labelEn: 'Pay Later / Installments' },
-    { id: 'reports', num: 15, labelAr: 'التقارير والتحليلات', labelEn: 'Reports & Trends' },
-    { id: 'goals', num: 16, labelAr: 'الأهداف المالية', labelEn: 'Financial Goals' },
-    { id: 'settings', num: 17, labelAr: 'الإعدادات والخصوصية', labelEn: 'Settings & Privacy' },
-    { id: 'premium', num: 18, labelAr: 'الاشتراك المميز', labelEn: 'Premium Subscription' },
-    { id: 'splits', num: 19, labelAr: 'قسمة الفواتير', labelEn: 'Split Bills' },
+    // 'family' was fully built (Family Shared Budget screen, live data wiring) but had NO
+    // navigation entry anywhere in the app before this fix — an unreachable dead screen.
+    // Found while wiring Phase 3's kids-card feature into it; fixed by listing it here.
+    { id: 'family', num: 15, labelAr: 'الأسرة والعائلة', labelEn: 'Family & Household' },
+    { id: 'reports', num: 16, labelAr: 'التقارير والتحليلات', labelEn: 'Reports & Trends' },
+    { id: 'goals', num: 17, labelAr: 'الأهداف المالية', labelEn: 'Financial Goals' },
+    { id: 'settings', num: 18, labelAr: 'الإعدادات والخصوصية', labelEn: 'Settings & Privacy' },
+    { id: 'premium', num: 19, labelAr: 'الاشتراك المميز', labelEn: 'Premium Subscription' },
+    { id: 'splits', num: 20, labelAr: 'قسمة الفواتير', labelEn: 'Split Bills' },
+    { id: 'open_banking', num: 21, labelAr: 'ربط الحسابات (تجريبي)', labelEn: 'Bank Linking (Demo)' },
   ];
 
   const showBottomNav = !['splash', 'language', 'currency_setup', 'onboarding', 'persona', 'income_setup', 'commitments_setup'].includes(activeScreen);
@@ -643,21 +660,21 @@ export default function App() {
 
             {/* Persistent SafeSpend Top Navigation Header */}
             <div className={`px-4 py-2 bg-[#051411]/95 backdrop-blur-md border-b border-emerald-950/40 flex ${isAr ? 'flex-row-reverse' : 'flex-row'} justify-between items-center select-none shrink-0 z-30`}>
-              {/* Menu Trigger Button (19 Screens) */}
+              {/* Menu Trigger Button (21 Screens) */}
               <button 
                 onClick={() => {
                   setShowSidebar(true);
                   setShowControls(false);
                 }}
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-950/40 border border-emerald-900/30 hover:border-emerald-500/50 rounded-xl text-emerald-400 hover:text-white transition-all cursor-pointer font-bold ${isAr ? 'flex-row-reverse' : 'flex-row'}`}
-                title={isAr ? "دليل الـ 19 شاشة" : "19 Screens Menu"}
+                title={isAr ? "دليل الـ 21 شاشة" : "21 Screens Menu"}
               >
                 <Sliders size={12} className="stroke-[2.5]" />
                 <span className="text-[10px] font-extrabold">
                   {isAr ? "الشاشات" : "Screens"}
                 </span>
                 <span className="w-4 h-4 rounded-full bg-emerald-500 text-black text-[9px] font-mono font-bold flex items-center justify-center">
-                  19
+                  21
                 </span>
               </button>
               
@@ -770,8 +787,8 @@ export default function App() {
                 />
               )}
 
-              {/* 13, 14, 15, 16, 17, 18, 19, 20: Management, VIP plans, and bill splitting */}
-              {(activeScreen === 'upcoming' || activeScreen === 'installments' || activeScreen === 'family' || activeScreen === 'reports' || activeScreen === 'goals' || activeScreen === 'settings' || activeScreen === 'premium' || activeScreen === 'splits') && (
+              {/* 13-20: Management, VIP plans, bill splitting, and open-banking demo preview */}
+              {(activeScreen === 'upcoming' || activeScreen === 'installments' || activeScreen === 'family' || activeScreen === 'reports' || activeScreen === 'goals' || activeScreen === 'settings' || activeScreen === 'premium' || activeScreen === 'splits' || activeScreen === 'open_banking') && (
                 <ManagementScreens
                   screenId={activeScreen}
                   lang={lang}
@@ -786,6 +803,10 @@ export default function App() {
                   setGoals={setGoals}
                   billSplits={billSplits}
                   setBillSplits={setBillSplits}
+                  linkedBankAccounts={linkedBankAccounts}
+                  setLinkedBankAccounts={setLinkedBankAccounts}
+                  kidsCards={kidsCards}
+                  setKidsCards={setKidsCards}
                   showBalances={showBalances}
                   toggleShowBalances={() => setShowBalances(!showBalances)}
                   langToggle={() => setLang(prev => prev === 'ar' ? 'en' : 'ar')}
@@ -1019,7 +1040,7 @@ export default function App() {
                     <div className={`flex items-center gap-1.5 text-emerald-400 ${isAr ? 'flex-row-reverse' : 'flex-row'}`}>
                       <Smartphone size={14} />
                       <h3 className="text-xs font-bold uppercase tracking-tight">
-                        {isAr ? "دليل الشاشات الـ 19" : "19-Screen Navigator"}
+                        {isAr ? "دليل الشاشات الـ 21" : "21-Screen Navigator"}
                       </h3>
                     </div>
                     <button 
@@ -1108,7 +1129,7 @@ export default function App() {
                     <div>
                       <div className={`text-[9px] font-extrabold uppercase tracking-wider text-emerald-400/80 mb-1.5 border-b border-emerald-950/40 pb-0.5 flex ${isAr ? 'flex-row-reverse' : 'flex-row'} items-center gap-1`}>
                         <Award size={10} />
-                        <span dir={isAr ? 'rtl' : 'ltr'}>{isAr ? "الإدارة والتقارير (13-19)" : "3. Management & Reports"}</span>
+                        <span dir={isAr ? 'rtl' : 'ltr'}>{isAr ? "الإدارة والتقارير (13-21)" : "3. Management & Reports"}</span>
                       </div>
                       <div className="flex flex-col gap-1">
                         {POSTER_SCREENS.filter(s => s.num >= 13).map((s) => {

@@ -21,7 +21,8 @@ export type ScreenId =
   | 'goals'             // 17
   | 'settings'          // 18
   | 'premium'           // 19
-  | 'splits';           // 20 — Phase 2: social bill splitting
+  | 'splits'            // 20 — Phase 2: social bill splitting
+  | 'open_banking';     // 21 — Phase 3: bank linking (demo preview)
 
 export interface Transaction {
   id: string;
@@ -126,6 +127,37 @@ export interface BillSplit {
   date: string;
   participants: SplitParticipant[]; // everyone who owes a share EXCEPT the user
   note?: string;
+}
+
+// Phase 3 — Open banking + kids card, DEMO PREVIEW ONLY.
+//
+// Real account linking requires partnering with a SAMA-licensed Open
+// Banking enabler (e.g. Lean Technologies or Tarabut Gateway — both hold
+// SAMA authorization today, so SafeSpend would integrate via their API
+// rather than obtain its own banking license). Real card issuance requires
+// a card-issuing-as-a-service partner (e.g. Paymentology, NymCard) plus a
+// sponsor bank. Neither integration exists yet — everything below is a
+// clearly-labeled, locally-simulated preview so the UX can be designed and
+// tested now, with zero risk of implying a real bank connection exists.
+// `demo: true` is a permanent, non-optional marker — every record created
+// by this feature must carry it, and the UI must never hide it.
+export interface LinkedBankAccount {
+  id: string;
+  labelAr: string;   // deliberately generic, e.g. "حساب تجريبي 1" — never a real bank name
+  labelEn: string;
+  last4: string;      // simulated digits only
+  balance: number;    // simulated balance
+  connectedAt: string;
+  demo: true;
+}
+
+export interface KidsCard {
+  id: string;
+  familyMemberId: string;
+  last4: string;       // simulated digits only
+  spendingLimit: number;
+  active: boolean;
+  demo: true;
 }
 
 export interface FinancialPersona {

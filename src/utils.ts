@@ -26,7 +26,7 @@ export function formatMoney(amount: number, lang: AppLanguage, currencyCode: str
   return `${formattedNumber} ${symbol}`;
 }
 
-import { Transaction, SavingBox, Commitment, FamilyMember, Installment, FinancialGoal, BillSplit, SplitParticipant } from './types';
+import { Transaction, SavingBox, Commitment, FamilyMember, Installment, FinancialGoal, BillSplit, SplitParticipant, LinkedBankAccount, KidsCard } from './types';
 
 /**
  * Sums the `amount` field across a list of items (transactions, commitments,
@@ -371,6 +371,49 @@ export function buildSplitShareText(
   return lang === 'ar'
     ? `مرحباً ${name}، تذكير بسيط: عليك ${amountStr} من فاتورة "${title}". تابعت المبلغ عبر تطبيق SafeSpend 🙂`
     : `Hey ${name}, quick reminder: you owe ${amountStr} for "${title}". Tracked with the SafeSpend app 🙂`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 3 — Open Banking + Kids Card (DEMO PREVIEW)
+//
+// No real bank or card-issuing integration exists yet (see the `demo: true`
+// comment in types.ts for why, and which licensed partners the real
+// integration would go through). These helpers only ever produce clearly
+// fake, locally-generated data — never call, mimic, or hint at a real bank
+// API request.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** A random 4-digit string for a simulated account/card number tail. Not tied to any real instrument. */
+function randomLast4(): string {
+  return String(Math.floor(1000 + Math.abs(Math.sin(Date.now() % 10000)) * 8999)).slice(0, 4);
+}
+
+export function createDemoLinkedAccount(index: number, lang: AppLanguage): LinkedBankAccount {
+  const now = new Date().toISOString().slice(0, 10);
+  return {
+    id: `demo-acct-${Date.now()}-${index}`,
+    labelAr: `حساب تجريبي ${index}`,
+    labelEn: `Demo Account ${index}`,
+    last4: randomLast4(),
+    balance: Math.round((500 + Math.abs(Math.sin(index + Date.now())) * 9500) * 100) / 100,
+    connectedAt: now,
+    demo: true,
+  };
+}
+
+export function getLinkedAccountsTotal(accounts: LinkedBankAccount[]): number {
+  return accounts.reduce((sum, a) => sum + a.balance, 0);
+}
+
+export function createDemoKidsCard(familyMemberId: string, spendingLimit: number): KidsCard {
+  return {
+    id: `demo-card-${Date.now()}`,
+    familyMemberId,
+    last4: randomLast4(),
+    spendingLimit,
+    active: true,
+    demo: true,
+  };
 }
 
 export function getZakatEstimate(goals: FinancialGoal[], currencyCode: string): ZakatEstimate {
