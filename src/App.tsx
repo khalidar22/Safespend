@@ -38,9 +38,10 @@ import {
   Transaction, 
   SavingBox, 
   Commitment, 
-  Installment, 
-  FamilyMember, 
-  FinancialGoal 
+  Installment,
+  FamilyMember,
+  FinancialGoal,
+  BillSplit
 } from './types';
 import { 
   INITIAL_TRANSACTIONS, 
@@ -131,6 +132,7 @@ export default function App() {
   const [installments, setInstallments] = useState<Installment[]>(savedState?.installments || []);
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>(savedState?.familyMembers || []);
   const [goals, setGoals] = useState<FinancialGoal[]>(savedState?.goals || []);
+  const [billSplits, setBillSplits] = useState<BillSplit[]>(savedState?.billSplits || []);
   const [selectedPersona, setSelectedPersona] = useState<string | null>(savedState?.selectedPersona || 'persona-3'); // Family Style by default
   
   // Calculations
@@ -207,6 +209,7 @@ export default function App() {
       installments,
       familyMembers,
       goals,
+      billSplits,
       microThresholdPct,
       lastSeenAlertState,
       lastDailyCalcDate,
@@ -233,6 +236,7 @@ export default function App() {
     installments,
     familyMembers,
     goals,
+    billSplits,
     microThresholdPct,
     lastSeenAlertState,
     lastDailyCalcDate,
@@ -263,6 +267,7 @@ export default function App() {
           installments,
           familyMembers,
           goals,
+          billSplits,
           microThresholdPct,
           lastSeenAlertState,
           lastDailyCalcDate,
@@ -559,6 +564,7 @@ export default function App() {
     if (imported.installments !== undefined) setInstallments(imported.installments);
     if (imported.familyMembers !== undefined) setFamilyMembers(imported.familyMembers);
     if (imported.goals !== undefined) setGoals(imported.goals);
+    if (imported.billSplits !== undefined) setBillSplits(imported.billSplits);
     
     setActiveScreen('dashboard');
   };
@@ -596,6 +602,7 @@ export default function App() {
     { id: 'goals', num: 16, labelAr: 'الأهداف المالية', labelEn: 'Financial Goals' },
     { id: 'settings', num: 17, labelAr: 'الإعدادات والخصوصية', labelEn: 'Settings & Privacy' },
     { id: 'premium', num: 18, labelAr: 'الاشتراك المميز', labelEn: 'Premium Subscription' },
+    { id: 'splits', num: 19, labelAr: 'قسمة الفواتير', labelEn: 'Split Bills' },
   ];
 
   const showBottomNav = !['splash', 'language', 'currency_setup', 'onboarding', 'persona', 'income_setup', 'commitments_setup'].includes(activeScreen);
@@ -643,14 +650,14 @@ export default function App() {
                   setShowControls(false);
                 }}
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-950/40 border border-emerald-900/30 hover:border-emerald-500/50 rounded-xl text-emerald-400 hover:text-white transition-all cursor-pointer font-bold ${isAr ? 'flex-row-reverse' : 'flex-row'}`}
-                title={isAr ? "دليل الـ 18 شاشة" : "18 Screens Menu"}
+                title={isAr ? "دليل الـ 19 شاشة" : "19 Screens Menu"}
               >
                 <Sliders size={12} className="stroke-[2.5]" />
                 <span className="text-[10px] font-extrabold">
                   {isAr ? "الشاشات" : "Screens"}
                 </span>
                 <span className="w-4 h-4 rounded-full bg-emerald-500 text-black text-[9px] font-mono font-bold flex items-center justify-center">
-                  18
+                  19
                 </span>
               </button>
               
@@ -763,8 +770,8 @@ export default function App() {
                 />
               )}
 
-              {/* 13, 14, 15, 16, 17, 18, 19: Management and VIP plans */}
-              {(activeScreen === 'upcoming' || activeScreen === 'installments' || activeScreen === 'family' || activeScreen === 'reports' || activeScreen === 'goals' || activeScreen === 'settings' || activeScreen === 'premium') && (
+              {/* 13, 14, 15, 16, 17, 18, 19, 20: Management, VIP plans, and bill splitting */}
+              {(activeScreen === 'upcoming' || activeScreen === 'installments' || activeScreen === 'family' || activeScreen === 'reports' || activeScreen === 'goals' || activeScreen === 'settings' || activeScreen === 'premium' || activeScreen === 'splits') && (
                 <ManagementScreens
                   screenId={activeScreen}
                   lang={lang}
@@ -777,6 +784,8 @@ export default function App() {
                   setFamilyMembers={setFamilyMembers}
                   goals={goals}
                   setGoals={setGoals}
+                  billSplits={billSplits}
+                  setBillSplits={setBillSplits}
                   showBalances={showBalances}
                   toggleShowBalances={() => setShowBalances(!showBalances)}
                   langToggle={() => setLang(prev => prev === 'ar' ? 'en' : 'ar')}
@@ -1010,7 +1019,7 @@ export default function App() {
                     <div className={`flex items-center gap-1.5 text-emerald-400 ${isAr ? 'flex-row-reverse' : 'flex-row'}`}>
                       <Smartphone size={14} />
                       <h3 className="text-xs font-bold uppercase tracking-tight">
-                        {isAr ? "دليل الشاشات الـ 18" : "18-Screen Navigator"}
+                        {isAr ? "دليل الشاشات الـ 19" : "19-Screen Navigator"}
                       </h3>
                     </div>
                     <button 
@@ -1099,7 +1108,7 @@ export default function App() {
                     <div>
                       <div className={`text-[9px] font-extrabold uppercase tracking-wider text-emerald-400/80 mb-1.5 border-b border-emerald-950/40 pb-0.5 flex ${isAr ? 'flex-row-reverse' : 'flex-row'} items-center gap-1`}>
                         <Award size={10} />
-                        <span dir={isAr ? 'rtl' : 'ltr'}>{isAr ? "الإدارة والتقارير (13-18)" : "3. Management & Reports"}</span>
+                        <span dir={isAr ? 'rtl' : 'ltr'}>{isAr ? "الإدارة والتقارير (13-19)" : "3. Management & Reports"}</span>
                       </div>
                       <div className="flex flex-col gap-1">
                         {POSTER_SCREENS.filter(s => s.num >= 13).map((s) => {

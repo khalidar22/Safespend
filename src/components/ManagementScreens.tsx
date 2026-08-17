@@ -25,17 +25,20 @@ import {
   Save,
   CheckCircle,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Share2
 } from 'lucide-react';
-import { 
-  AppLanguage, 
-  ScreenId, 
-  Commitment, 
-  Installment, 
-  FamilyMember, 
-  FinancialGoal 
+import {
+  AppLanguage,
+  ScreenId,
+  Commitment,
+  Installment,
+  FamilyMember,
+  FinancialGoal,
+  BillSplit,
+  SplitParticipant
 } from '../types';
-import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, projectBnplRatio, getZakatEstimate } from '../utils';
+import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, projectBnplRatio, getZakatEstimate, computeEqualSplit, getTotalOwedToUser, buildSplitShareText } from '../utils';
 import { CURRENCIES, getCurrency } from '../currencies';
 import { getProvidersForCurrency, getProvider } from '../bnplProviders';
 
@@ -51,6 +54,8 @@ interface ManagementScreensProps {
   setFamilyMembers: React.Dispatch<React.SetStateAction<FamilyMember[]>>;
   goals: FinancialGoal[];
   setGoals: React.Dispatch<React.SetStateAction<FinancialGoal[]>>;
+  billSplits: BillSplit[];
+  setBillSplits: React.Dispatch<React.SetStateAction<BillSplit[]>>;
   showBalances: boolean;
   toggleShowBalances: () => void;
   langToggle: () => void;
@@ -83,6 +88,8 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   setFamilyMembers,
   goals,
   setGoals,
+  billSplits,
+  setBillSplits,
   showBalances,
   toggleShowBalances,
   langToggle,
@@ -230,6 +237,115 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
       setInstallments(prev => [newInstallment, ...prev]);
     }
     setShowInstallmentForm(false);
+  };
+
+  // Phase 2 — Bill split add-form state
+  const [showSplitForm, setShowSplitForm] = useState<boolean>(false);
+  const [splitTitle, setSplitTitle] = useState('');
+  const [splitTotal, setSplitTotal] = useState<number | ''>('');
+  const [splitRows, setSplitRows] = useState<{ id: string; name: string; amount: number | '' }[]>([]);
+  const [splitToDelete, setSplitToDelete] = useState<BillSplit | null>(null);
+  const [copiedParticipantId, setCopiedParticipantId] = useState<string | null>(null);
+
+  const handleStartAddSplit = () => {
+    setSplitTitle('');
+    setSplitTotal('');
+    setSplitRows([{ id: `row-${Date.now()}`, name: '', amount: '' }]);
+    setShowSplitForm(true);
+  };
+
+  const addSplitRow = () => {
+    setSplitRows(prev => [...prev, { id: `row-${Date.now()}-${prev.length}`, name: '', amount: '' }]);
+  };
+  const removeSplitRow = (id: string) => setSplitRows(prev => prev.filter(r => r.id !== id));
+  const updateSplitRow = (id: string, patch: Partial<{ name: string; amount: number | '' }>) => {
+    setSplitRows(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
+  };
+
+  // Divides the bill equally across everyone (participants + the user, who paid).
+  const applyEqualSplit = () => {
+    if (!splitTotal || splitRows.length === 0) return;
+    const share = computeEqualSplit(Number(splitTotal), splitRows.length + 1);
+    setSplitRows(prev => prev.map(r => ({ ...r, amount: share })));
+  };
+
+  const handleSaveSplit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const validRows = splitRows.filter(r => r.name.trim() && r.amount !== '' && Number(r.amount) > 0);
+    if (!splitTitle.trim() || !splitTotal || validRows.length === 0) return;
+
+    const participants: SplitParticipant[] = validRows.map((r, idx) => ({
+      id: `part-${Date.now()}-${idx}`,
+      nameAr: r.name.trim(),
+      nameEn: r.name.trim(),
+      amountOwed: Number(r.amount),
+      settled: false,
+    }));
+
+    const newSplit: BillSplit = {
+      id: `split-${Date.now()}`,
+      titleAr: splitTitle.trim(),
+      titleEn: splitTitle.trim(),
+      totalAmount: Number(splitTotal),
+      date: new Date().toISOString().slice(0, 10),
+      participants,
+    };
+    setBillSplits(prev => [newSplit, ...prev]);
+    setShowSplitForm(false);
+  };
+
+  // Marking a participant "settled" logs the money they paid back as real income —
+  // mirrors handleTogglePaid/handleToggleInstallment's linked-transaction pattern.
+  const handleToggleSettled = (splitId: string, participantId: string) => {
+    const split = billSplits.find(s => s.id === splitId);
+    const participant = split?.participants.find(p => p.id === participantId);
+    if (!split || !participant) return;
+
+    if (!participant.settled) {
+      const newTxId = `tx-split-${participantId}-${Date.now()}`;
+      const newTx = {
+        id: newTxId,
+        titleAr: `تسوية قسمة: ${participant.nameAr} — ${split.titleAr}`,
+        titleEn: `Split settled: ${participant.nameEn} — ${split.titleEn}`,
+        categoryAr: 'تسوية فواتير',
+        categoryEn: 'Bill Settlements',
+        amount: participant.amountOwed,
+        type: 'income' as const,
+        date: new Date().toISOString().slice(0, 10),
+        icon: 'users',
+      };
+      setTransactions(prev => [newTx, ...prev]);
+      setBillSplits(prev => prev.map(s => s.id !== splitId ? s : {
+        ...s,
+        participants: s.participants.map(p => p.id === participantId ? { ...p, settled: true, linkedTxId: newTxId } : p),
+      }));
+    } else {
+      if (participant.linkedTxId) {
+        setTransactions(prev => prev.filter(t => t.id !== participant.linkedTxId));
+      }
+      setBillSplits(prev => prev.map(s => s.id !== splitId ? s : {
+        ...s,
+        participants: s.participants.map(p => p.id === participantId ? { ...p, settled: false, linkedTxId: undefined } : p),
+      }));
+    }
+  };
+
+  // Native share sheet when available (mobile), clipboard copy fallback otherwise —
+  // this is the phase's growth channel: the message works for people who've
+  // never opened SafeSpend at all.
+  const handleShareParticipant = async (split: BillSplit, participant: SplitParticipant) => {
+    const text = buildSplitShareText(split, participant, lang, currency);
+    const nav: any = typeof navigator !== 'undefined' ? navigator : null;
+    if (nav?.share) {
+      try { await nav.share({ text }); return; } catch { /* user cancelled or unsupported — fall through */ }
+    }
+    if (nav?.clipboard?.writeText) {
+      try {
+        await nav.clipboard.writeText(text);
+        setCopiedParticipantId(participant.id);
+        setTimeout(() => setCopiedParticipantId(null), 1800);
+      } catch { /* clipboard blocked — nothing more we can do silently */ }
+    }
   };
 
   // Transfer accumulated balance from one goal to another (keeps the money inside the goals system)
@@ -1491,6 +1607,216 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                 ))}
               </div>
               <button type="button" onClick={() => setGoalToTransferFrom(null)} className="py-2 bg-[#020d0a] border border-emerald-950 text-slate-400 text-xs font-bold rounded-xl">{isAr ? "تراجع" : "Cancel"}</button>
+            </div>
+          </div>
+        )}
+
+        <div className="h-24 shrink-0" />
+      </div>
+    );
+  }
+
+  // Phase 2 — Screen 19: Social Bill Splitting
+  if (screenId === 'splits') {
+    const totalOwed = getTotalOwedToUser(billSplits);
+    return (
+      <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto pb-24" dir={isAr ? 'rtl' : 'ltr'}>
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={() => onNavigate('dashboard')} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30">
+            {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          </button>
+          <h2 className="text-base font-bold text-white">{isAr ? "قسمة الفواتير" : "Split Bills"}</h2>
+        </div>
+
+        {/* Total owed to the user across all active splits */}
+        <div className="p-4 rounded-2xl bg-gradient-to-br from-[#051a0f] to-[#020a04] border border-emerald-800/50 mb-5 text-center">
+          <span className="text-[9px] text-emerald-400 font-bold tracking-widest uppercase block mb-1">
+            {isAr ? "إجمالي المستحق لك من الآخرين" : "Total Others Owe You"}
+          </span>
+          <div className="text-2xl font-extrabold text-white font-display">
+            {showBalances ? formatMoney(totalOwed, lang, currency) : '••••'}
+          </div>
+          <p className="text-[10px] text-slate-400 mt-2">
+            {isAr ? "ادفع الفاتورة كاملة، ثم قسّمها هنا وذكّر كل شخص بحصته" : "Pay the full bill, split it here, then remind each person of their share"}
+          </p>
+        </div>
+
+        {/* Add / build a new split */}
+        {!showSplitForm ? (
+          <button
+            type="button"
+            onClick={handleStartAddSplit}
+            className="mb-4 py-2.5 w-full border border-dashed border-emerald-800/50 hover:border-emerald-500 hover:bg-[#061d19]/20 transition-all text-emerald-400 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1"
+          >
+            <Plus size={13} />
+            <span>{isAr ? "قسمة فاتورة جديدة +" : "+ Split a New Bill"}</span>
+          </button>
+        ) : (
+          <form onSubmit={handleSaveSplit} className="mb-4 p-3 bg-[#051411] border border-emerald-500/20 rounded-xl flex flex-col gap-2">
+            <input
+              type="text"
+              value={splitTitle}
+              onChange={e => setSplitTitle(e.target.value)}
+              placeholder={isAr ? "اسم الفاتورة (مثال: عشاء الجمعة)" : "Bill name (e.g. Friday Dinner)"}
+              className="bg-[#030d0a] border border-emerald-950 px-3 py-2 text-xs rounded-xl text-white"
+              required
+            />
+            <input
+              type="number"
+              value={splitTotal}
+              onChange={e => setSplitTotal(e.target.value === '' ? '' : Number(e.target.value))}
+              placeholder={isAr ? "المبلغ الإجمالي الذي دفعته" : "Total amount you paid"}
+              className="bg-[#030d0a] border border-emerald-950 px-3 py-2 text-xs rounded-xl text-white"
+              required
+              min={1}
+            />
+
+            <div className="flex items-center justify-between mt-1 mb-0.5">
+              <span className="text-[9px] text-emerald-500/80 font-bold px-1">
+                {isAr ? "شارِك الفاتورة مع:" : "Split the bill with:"}
+              </span>
+              {splitTotal !== '' && splitRows.length > 0 && (
+                <button type="button" onClick={applyEqualSplit} className="text-[9px] font-bold text-amber-400 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                  {isAr ? "قسّم بالتساوي" : "Split Equally"}
+                </button>
+              )}
+            </div>
+
+            {splitRows.map((row) => (
+              <div key={row.id} className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={row.name}
+                  onChange={e => updateSplitRow(row.id, { name: e.target.value })}
+                  placeholder={isAr ? "اسم الشخص" : "Person's name"}
+                  className="bg-[#030d0a] border border-emerald-950 px-3 py-2 text-xs rounded-xl text-white flex-1"
+                />
+                <input
+                  type="number"
+                  value={row.amount}
+                  onChange={e => updateSplitRow(row.id, { amount: e.target.value === '' ? '' : Number(e.target.value) })}
+                  placeholder={isAr ? "المبلغ" : "Amount"}
+                  className="bg-[#030d0a] border border-emerald-950 px-3 py-2 text-xs rounded-xl text-white w-24"
+                  min={0}
+                />
+                {splitRows.length > 1 && (
+                  <button type="button" onClick={() => removeSplitRow(row.id)} className="p-2 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10">
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={addSplitRow} className="text-[10px] font-bold text-emerald-400 py-1.5 flex items-center justify-center gap-1 border border-dashed border-emerald-900 rounded-lg">
+              <Plus size={11} />
+              <span>{isAr ? "أضف شخصاً آخر" : "Add another person"}</span>
+            </button>
+
+            <div className="grid grid-cols-2 gap-1.5 mt-1">
+              <button type="submit" className="py-2 bg-emerald-500 text-slate-950 text-xs font-bold rounded-xl">
+                {isAr ? "حفظ القسمة" : "Save Split"}
+              </button>
+              <button type="button" onClick={() => setShowSplitForm(false)} className="py-2 bg-[#020d0a] border border-emerald-950 text-slate-400 text-xs font-bold rounded-xl">
+                {isAr ? "إلغاء" : "Cancel"}
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div className="flex flex-col gap-3">
+          {billSplits.map((split) => {
+            const settledCount = split.participants.filter(p => p.settled).length;
+            const allSettled = settledCount === split.participants.length;
+            return (
+              <div key={split.id} className={`bg-[#051613] border rounded-2xl p-4 flex flex-col shadow-sm ${allSettled ? 'border-emerald-500/30 opacity-70' : 'border-emerald-950'}`}>
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-100">{isAr ? split.titleAr : split.titleEn}</h4>
+                    <span className="text-[9px] text-slate-400">
+                      {isAr ? `الإجمالي: ${formatMoney(split.totalAmount, lang, currency)}` : `Total: ${formatMoney(split.totalAmount, lang, currency)}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className={`text-[9px] px-2 py-0.5 rounded-full font-mono font-bold border ${allSettled ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400' : 'bg-[#071f1b] border-emerald-950 text-emerald-400'}`}>
+                      {allSettled ? (isAr ? "مكتملة ✓" : "Settled ✓") : `${settledCount}/${split.participants.length} ${isAr ? "استُلمت" : "settled"}`}
+                    </span>
+                    <button type="button" onClick={() => setSplitToDelete(split)} className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-all">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5 mt-1.5">
+                  {split.participants.map((participant) => (
+                    <div key={participant.id} className="flex items-center justify-between gap-2 bg-[#030d0a] border border-emerald-950/60 rounded-xl px-2.5 py-1.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Users size={11} className="text-slate-500 shrink-0" />
+                        <span className="text-[10px] text-slate-200 truncate">{isAr ? participant.nameAr : participant.nameEn}</span>
+                        <span className="text-[10px] font-mono font-bold text-amber-400 shrink-0">
+                          {formatMoney(participant.amountOwed, lang, currency)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {!participant.settled && (
+                          <button
+                            type="button"
+                            onClick={() => handleShareParticipant(split, participant)}
+                            className="p-1 rounded-lg text-emerald-400 hover:bg-emerald-500/10"
+                            title={isAr ? "شارك تذكيراً" : "Share a reminder"}
+                          >
+                            {copiedParticipantId === participant.id ? <Check size={12} /> : <Share2 size={12} />}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSettled(split.id, participant.id)}
+                          className={`text-[9px] font-bold px-2 py-1 rounded-lg border ${
+                            participant.settled
+                              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                              : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+                          }`}
+                        >
+                          {participant.settled ? (isAr ? "✓ استُلم" : "✓ Received") : (isAr ? "استُلم" : "Mark Received")}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {billSplits.length === 0 && !showSplitForm && (
+          <p className="text-center text-[10px] text-slate-500 mt-6">
+            {isAr ? "لا توجد فواتير مقسومة بعد." : "No split bills yet."}
+          </p>
+        )}
+
+        {/* Delete confirmation */}
+        {splitToDelete && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-6" onClick={() => setSplitToDelete(null)}>
+            <div className="bg-[#051411] border border-rose-500/30 rounded-2xl p-5 max-w-xs w-full flex flex-col gap-3" onClick={e => e.stopPropagation()}>
+              <h4 className="text-xs font-bold text-rose-400">{isAr ? "حذف القسمة؟" : "Delete this split?"}</h4>
+              <p className="text-[10px] text-slate-400 leading-relaxed">
+                {isAr
+                  ? `سيُحذف "${splitToDelete.titleAr}" ولن يعود بالإمكان تتبع من دفع ومن لم يدفع.`
+                  : `"${splitToDelete.titleEn}" will be deleted — you'll lose track of who paid and who hasn't.`}
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBillSplits(prev => prev.filter(s => s.id !== splitToDelete.id));
+                    setSplitToDelete(null);
+                  }}
+                  className="py-2 bg-rose-500 text-white text-xs font-bold rounded-xl"
+                >
+                  {isAr ? "احذف" : "Delete"}
+                </button>
+                <button type="button" onClick={() => setSplitToDelete(null)} className="py-2 bg-[#020d0a] border border-emerald-950 text-slate-400 text-xs font-bold rounded-xl">
+                  {isAr ? "تراجع" : "Cancel"}
+                </button>
+              </div>
             </div>
           </div>
         )}

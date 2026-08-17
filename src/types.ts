@@ -20,7 +20,8 @@ export type ScreenId =
   | 'reports'           // 16
   | 'goals'             // 17
   | 'settings'          // 18
-  | 'premium';          // 19
+  | 'premium'           // 19
+  | 'splits';           // 20 — Phase 2: social bill splitting
 
 export interface Transaction {
   id: string;
@@ -100,6 +101,31 @@ export interface FamilyMember {
   relationEn: string;
   relationAr: string;
   color: string;
+}
+
+// Phase 2 — Social bill splitting. A BillSplit records a bill the app's user
+// PAID IN FULL, then divides among other people (tracked FamilyMembers or
+// ad-hoc names — friends who don't use the app at all). Each participant
+// owes their share back to the user; marking one "settled" logs it as real
+// income once the money actually changes hands.
+export interface SplitParticipant {
+  id: string;
+  nameAr: string;
+  nameEn: string;
+  amountOwed: number;
+  settled: boolean;
+  linkedTxId?: string;      // the income transaction created when settled
+  familyMemberId?: string;  // optional link to an existing tracked family member
+}
+
+export interface BillSplit {
+  id: string;
+  titleAr: string;
+  titleEn: string;
+  totalAmount: number;      // full bill amount the user paid
+  date: string;
+  participants: SplitParticipant[]; // everyone who owes a share EXCEPT the user
+  note?: string;
 }
 
 export interface FinancialPersona {

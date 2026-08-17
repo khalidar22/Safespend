@@ -26,7 +26,7 @@ export function formatMoney(amount: number, lang: AppLanguage, currencyCode: str
   return `${formattedNumber} ${symbol}`;
 }
 
-import { Transaction, SavingBox, Commitment, FamilyMember, Installment, FinancialGoal } from './types';
+import { Transaction, SavingBox, Commitment, FamilyMember, Installment, FinancialGoal, BillSplit, SplitParticipant } from './types';
 
 /**
  * Sums the `amount` field across a list of items (transactions, commitments,
@@ -327,6 +327,50 @@ export interface ZakatEstimate {
   titleEn: string;
   bodyAr: string;
   bodyEn: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 2 — Social Bill Splitting
+//
+// Turns a bill the user paid in full into shares owed by other people
+// (tracked family members OR ad-hoc friends who don't use the app at all).
+// This is the phase's designed "network effect" growth channel: the share
+// message below is built so it makes sense to a total stranger who has
+// never opened SafeSpend — the app's name rides along into a WhatsApp/SMS
+// thread it was never installed in.
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Equal split of a bill's total across N people, including the payer. Rounds to cents. */
+export function computeEqualSplit(total: number, peopleCountIncludingPayer: number): number {
+  if (peopleCountIncludingPayer <= 0) return 0;
+  return Math.round((total / peopleCountIncludingPayer) * 100) / 100;
+}
+
+/** Sum still owed to the user across ALL splits (every unsettled participant, every split). */
+export function getTotalOwedToUser(splits: BillSplit[]): number {
+  return splits.reduce(
+    (sum, s) => sum + s.participants.filter(p => !p.settled).reduce((a, p) => a + p.amountOwed, 0),
+    0
+  );
+}
+
+/**
+ * Builds a standalone, friendly reminder message for ONE participant —
+ * readable and actionable even by someone who has never heard of SafeSpend.
+ * Meant to be dropped into navigator.share() or copied straight into a chat.
+ */
+export function buildSplitShareText(
+  split: BillSplit,
+  participant: SplitParticipant,
+  lang: AppLanguage,
+  currencyCode: string
+): string {
+  const amountStr = formatMoney(participant.amountOwed, lang, currencyCode);
+  const name = lang === 'ar' ? participant.nameAr : participant.nameEn;
+  const title = lang === 'ar' ? split.titleAr : split.titleEn;
+  return lang === 'ar'
+    ? `مرحباً ${name}، تذكير بسيط: عليك ${amountStr} من فاتورة "${title}". تابعت المبلغ عبر تطبيق SafeSpend 🙂`
+    : `Hey ${name}, quick reminder: you owe ${amountStr} for "${title}". Tracked with the SafeSpend app 🙂`;
 }
 
 export function getZakatEstimate(goals: FinancialGoal[], currencyCode: string): ZakatEstimate {
