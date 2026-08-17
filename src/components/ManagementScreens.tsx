@@ -64,6 +64,8 @@ interface ManagementScreensProps {
   setKidsCards: React.Dispatch<React.SetStateAction<KidsCard[]>>;
   isPremium: boolean;
   setIsPremium: React.Dispatch<React.SetStateAction<boolean>>;
+  zakatFeatureEnabled: boolean;
+  setZakatFeatureEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   showBalances: boolean;
   toggleShowBalances: () => void;
   langToggle: () => void;
@@ -104,6 +106,8 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   setKidsCards,
   isPremium,
   setIsPremium,
+  zakatFeatureEnabled,
+  setZakatFeatureEnabled,
   showBalances,
   toggleShowBalances,
   langToggle,
@@ -1533,8 +1537,11 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
           <h2 className="text-base font-bold text-white">{isAr ? "الأهداف المالية الذكية" : "Financial Goals Tracker"}</h2>
         </div>
 
-        {/* Phase 1 — Zakat Box: estimate + one-tap creation of a savings goal to cover it */}
+        {/* Phase 1 — Zakat Box: estimate + one-tap creation of a savings goal to cover it.
+            Opt-in only (zakatFeatureEnabled, off by default, see Settings) — never
+            surfaced unprompted, so non-Muslim or uninterested users never see it. */}
         {(() => {
+          if (!zakatFeatureEnabled) return null;
           const zakat = getZakatEstimate(goals, currency);
           const hasZakatGoal = goals.some(g => g.id === 'zakat-box');
           if (!zakat.eligible && !hasZakatGoal) return null;
@@ -2232,6 +2239,30 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
             </p>
           </div>
 
+          {/* Section 2b — Optional Tools. Off by default, discoverable here for
+              whoever wants them, with a plain-language explanation so users
+              unfamiliar with the term aren't left confused — never surfaced
+              unprompted elsewhere in the app. */}
+          <div className="bg-[#051613] rounded-2xl border border-emerald-950 p-4 flex flex-col gap-3 text-xs">
+            <h4 className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">{isAr ? "أدوات اختيارية" : "Optional Tools"}</h4>
+            <div className="flex justify-between items-center">
+              <div className="flex-1 pr-2">
+                <span className="text-slate-200 block">{isAr ? "حاسبة الزكاة" : "Zakat Calculator"}</span>
+                <p className="text-[10px] text-slate-500 leading-relaxed mt-0.5">
+                  {isAr
+                    ? "أداة اختيارية لتقدير زكاة المدخرات (التزام مالي ديني إسلامي، 2.5% فوق حد أدنى معيّن). فعّلها فقط إذا كانت تنطبق عليك."
+                    : "An optional tool to estimate Zakat on savings (an Islamic religious giving obligation, 2.5% above a minimum threshold). Only enable it if this applies to you."}
+                </p>
+              </div>
+              <button
+                onClick={() => setZakatFeatureEnabled(!zakatFeatureEnabled)}
+                className={`shrink-0 py-1 px-3 font-bold text-[10px] rounded ${zakatFeatureEnabled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'}`}
+              >
+                {zakatFeatureEnabled ? (isAr ? "مفعّلة" : "On") : (isAr ? "متوقفة" : "Off")}
+              </button>
+            </div>
+          </div>
+
           {/* Section 3: SafeSpend Support */}
           <div className="bg-[#051613] rounded-2xl border border-emerald-950 p-4 flex flex-col gap-2.5 text-xs">
             <h4 className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">{isAr ? "الدعم والمساعدة" : "Help & Documentation"}</h4>
@@ -2381,8 +2412,8 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
               <Shield size={12} className="stroke-[3]" />
             </div>
             <div>
-              <span className="font-bold text-slate-200">{isAr ? "حارس دفع آجل متقدم + تقرير زكاة سنوي" : "Advanced BNPL Guardian + Annual Zakat Report"}</span>
-              <p className="text-[10px] text-slate-400 mt-0.5">{isAr ? "تنبيهات فورية عبر كل مزوّدي الدفع الآجل، وتقرير زكاة سنوي قابل للتصدير لحسابك الشرعي." : "Real-time alerts across every BNPL provider, plus an exportable annual Zakat report for your religious accounting."}</p>
+              <span className="font-bold text-slate-200">{isAr ? "حارس دفع آجل متقدم" : "Advanced BNPL Guardian"}</span>
+              <p className="text-[10px] text-slate-400 mt-0.5">{isAr ? "تنبيهات فورية عبر كل مزوّدي الدفع الآجل، قبل أي قسط يتجاوز حدك الآمن." : "Real-time alerts across every BNPL provider, before any installment crosses your safe limit."}</p>
             </div>
           </div>
 
@@ -2413,6 +2444,16 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
             <div>
               <span className="font-bold text-slate-200">{isAr ? "تتبع ومشاركة وضع العائلة والأولاد" : "Full Family Synchronization"}</span>
               <p className="text-[10px] text-slate-400 mt-0.5">{isAr ? "مشاركة الميزانية والمصروفات حياً بين الزوج والزوجة والأبناء." : "Live real-time sync with partners and child pocket money limits."}</p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2.5">
+            <div className="w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500 shrink-0">
+              <Check size={12} className="stroke-[3]" />
+            </div>
+            <div>
+              <span className="font-bold text-slate-200">{isAr ? "تقرير زكاة سنوي (اختياري)" : "Annual Zakat Report (Optional)"}</span>
+              <p className="text-[10px] text-slate-400 mt-0.5">{isAr ? "لمن يفعّل حاسبة الزكاة الاختيارية من الإعدادات — تقرير سنوي قابل للتصدير." : "For users who enable the optional Zakat calculator in Settings — an exportable annual report."}</p>
             </div>
           </div>
         </div>

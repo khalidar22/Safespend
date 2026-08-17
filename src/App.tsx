@@ -141,6 +141,10 @@ export default function App() {
   // no real payment processor is connected yet, so subscribing never charges
   // real money. The UI must always say so explicitly when activating.
   const [isPremium, setIsPremium] = useState<boolean>(savedState?.isPremium || false);
+  // Zakat is an optional, opt-in tool (off by default) — never surfaced
+  // unprompted, since assuming it applies to every user excludes non-Muslim
+  // users and confuses anyone unfamiliar with the term. See Settings.
+  const [zakatFeatureEnabled, setZakatFeatureEnabled] = useState<boolean>(savedState?.zakatFeatureEnabled || false);
   const [selectedPersona, setSelectedPersona] = useState<string | null>(savedState?.selectedPersona || 'persona-3'); // Family Style by default
   
   // Calculations
@@ -221,6 +225,7 @@ export default function App() {
       linkedBankAccounts,
       kidsCards,
       isPremium,
+      zakatFeatureEnabled,
       microThresholdPct,
       lastSeenAlertState,
       lastDailyCalcDate,
@@ -251,6 +256,7 @@ export default function App() {
     linkedBankAccounts,
     kidsCards,
     isPremium,
+    zakatFeatureEnabled,
     microThresholdPct,
     lastSeenAlertState,
     lastDailyCalcDate,
@@ -584,6 +590,7 @@ export default function App() {
     if (imported.linkedBankAccounts !== undefined) setLinkedBankAccounts(imported.linkedBankAccounts);
     if (imported.kidsCards !== undefined) setKidsCards(imported.kidsCards);
     if (imported.isPremium !== undefined) setIsPremium(imported.isPremium);
+    if (imported.zakatFeatureEnabled !== undefined) setZakatFeatureEnabled(imported.zakatFeatureEnabled);
 
     setActiveScreen('dashboard');
   };
@@ -816,6 +823,8 @@ export default function App() {
                   setKidsCards={setKidsCards}
                   isPremium={isPremium}
                   setIsPremium={setIsPremium}
+                  zakatFeatureEnabled={zakatFeatureEnabled}
+                  setZakatFeatureEnabled={setZakatFeatureEnabled}
                   showBalances={showBalances}
                   toggleShowBalances={() => setShowBalances(!showBalances)}
                   langToggle={() => setLang(prev => prev === 'ar' ? 'en' : 'ar')}
@@ -1386,7 +1395,7 @@ export default function App() {
       {/* Elegant minimalist footer */}
       <footer className="py-4 text-center text-xs text-slate-600 border-t border-emerald-950/20 bg-[#020706] shrink-0">
         <div>
-          SafeSpend &copy; {new Date().getFullYear()} • {isAr ? "يحميك من فخ الأقساط، بوعي شرعي" : "Debt-safe budgeting, Shariah-aware"}
+          SafeSpend &copy; {new Date().getFullYear()} • {isAr ? "يحميك من فخ الأقساط" : "Debt-safe budgeting for everyone"}
         </div>
         <div className="text-[10px] text-slate-700 mt-1">
           Developed to exactly duplicate the 19 detailed UI layouts utilizing React, Tailwind CSS, and Lucide icons.

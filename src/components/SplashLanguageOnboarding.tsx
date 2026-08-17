@@ -71,7 +71,7 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
           
           <div className="flex flex-col items-center gap-1 mt-1">
             <h2 className="text-xl font-bold text-emerald-400">
-              Debt-Safe. Shariah-Aware.
+              Debt-Safe. Smarter Spending.
             </h2>
             <div className="w-8 h-[1px] bg-emerald-500/30"></div>
             <h2 className="text-xs font-semibold text-emerald-500/70 tracking-widest uppercase">

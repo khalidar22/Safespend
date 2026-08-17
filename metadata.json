@@ -1,4 +1,4 @@
 {
   "name": "SafeSpend",
-  "description": "The debt-safe, Shariah-aware budgeting app: warns you before any Buy-Now-Pay-Later installment crosses your safe limit and tracks your Zakat automatically. Supports bilingual layouts, daily safe budgets, leakage detection, family modes, saving boxes, social bill splitting, and a demo preview of open banking + kids cards."
+  "description": "The debt-safe budgeting app: warns you before any Buy-Now-Pay-Later installment crosses your safe limit, with an optional built-in Zakat tracker for users who want it. Supports bilingual layouts, daily safe budgets, leakage detection, family modes, saving boxes, social bill splitting, and a demo preview of open banking + kids cards."
 }
