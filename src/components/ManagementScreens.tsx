@@ -223,7 +223,14 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
         const newRemaining = Math.max(0, newTotalPayments - paidCount);
         // Re-value what's "paid so far" using the NEW monthly payment, so every
         // number on the card stays internally consistent with the edited plan.
-        newPaidAmount = Math.round(paidCount * monthlyPayment * 100) / 100;
+        // Capped at `total`: when the payment count is reduced a lot (e.g. 12 -> 4
+        // payments already 10 paid), the new higher monthly rate applied to the old
+        // paid-count could otherwise produce a paidAmount that exceeds the plan's
+        // total — which then shows an impossible negative "remaining" amount and
+        // silently understates the aggregate BNPL debt total elsewhere on this
+        // screen (see C2 in the reviewed open-items list). A plan can never be
+        // more than 100% paid.
+        newPaidAmount = Math.min(total, Math.round(paidCount * monthlyPayment * 100) / 100);
         updatedLinkedTxId = i.linkedTxId;
         return {
           ...i,
