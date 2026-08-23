@@ -169,6 +169,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   const [goalTarget, setGoalTarget] = useState(5000);
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+  const [goalTargetError, setGoalTargetError] = useState<string | null>(null);
   const [depositAmounts, setDepositAmounts] = useState<{ [goalId: string]: string }>({});
   const [goalToDelete, setGoalToDelete] = useState<FinancialGoal | null>(null);
   const [goalToTransferFrom, setGoalToTransferFrom] = useState<FinancialGoal | null>(null);
@@ -553,6 +554,17 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     e.preventDefault();
     if (!goalTitleEn && !goalTitleAr) return;
     if (editingGoalId) {
+      // Guard: never let an edit lower the target below the amount already saved.
+      // A goal's `current` balance must never be silently truncated — see the
+      // deposit handler below, which was also hardened for the same reason.
+      const existing = goals.find(item => item.id === editingGoalId);
+      if (existing && goalTarget < existing.current) {
+        setGoalTargetError(isAr
+          ? `لا يمكن خفض المستهدف تحت المبلغ المُدَّخر حالياً (${existing.current}). ارفع المستهدف أو انقل جزءاً من الرصيد لهدف آخر أولاً.`
+          : `Target can't be set below the amount already saved (${existing.current}). Raise the target, or transfer part of the balance to another goal first.`);
+        return;
+      }
+      setGoalTargetError(null);
       setGoals(prev => prev.map(item => item.id === editingGoalId
         ? { ...item, titleAr: goalTitleAr || goalTitleEn, titleEn: goalTitleEn || goalTitleAr, target: goalTarget }
         : item));
@@ -571,6 +583,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     setGoalTitleEn('');
     setGoalTarget(5000);
     setEditingGoalId(null);
+    setGoalTargetError(null);
     setShowAddGoal(false);
   };
 
@@ -580,6 +593,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     setGoalTitleAr(g.titleAr);
     setGoalTitleEn(g.titleEn);
     setGoalTarget(g.target);
+    setGoalTargetError(null);
     setShowAddGoal(true);
   };
 
@@ -1649,8 +1663,13 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                         const val = parseFloat(depositAmounts[g.id] || '');
                         if (isNaN(val) || val <= 0) return;
                         
-                        // 1. Add amount to goal's current
-                        setGoals(prev => prev.map(item => item.id === g.id ? { ...item, current: Math.min(item.target, item.current + val) } : item));
+                        // 1. Add amount to goal's current. Never cap/truncate here — a deposit
+                        // must never DECREASE the stored balance. (Previously this used
+                        // Math.min(item.target, item.current + val), which silently erased
+                        // already-saved money whenever target had been edited down below
+                        // current — see C1 in the reviewed open-items list.) The progress
+                        // bar's percentage display is separately clamped to 100% below.
+                        setGoals(prev => prev.map(item => item.id === g.id ? { ...item, current: item.current + val } : item));
                         
                         // 2. Register saving transaction of type 'expense' with category 'Saving'
                         const todayStr = new Date().toISOString().split('T')[0];
@@ -1694,37 +1713,42 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
           <form onSubmit={handleAddGoal} className="p-4 bg-[#051613] border border-emerald-500/30 rounded-2xl flex flex-col gap-3">
             <div className="flex justify-between items-center pb-2 border-b border-emerald-950/50">
               <h4 className="text-xs font-bold text-white">{editingGoalId ? (isAr ? "تعديل الهدف المالي" : "Edit Financial Goal") : (isAr ? "تحديد هدف مالي جديد" : "Establish New Goal")}</h4>
-              <button type="button" onClick={() => { setShowAddGoal(false); setEditingGoalId(null); setGoalTitleAr(''); setGoalTitleEn(''); setGoalTarget(5000); }} className="text-[10px] text-rose-500 hover:underline">{isAr ? "إلغاء" : "Cancel"}</button>
+              <button type="button" onClick={() => { setShowAddGoal(false); setEditingGoalId(null); setGoalTitleAr(''); setGoalTitleEn(''); setGoalTarget(5000); setGoalTargetError(null); }} className="text-[10px] text-rose-500 hover:underline">{isAr ? "إلغاء" : "Cancel"}</button>
             </div>
-            
+
             <div className="flex flex-col gap-2">
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={isAr ? goalTitleAr : goalTitleEn}
                 onChange={e => isAr ? setGoalTitleAr(e.target.value) : setGoalTitleEn(e.target.value)}
-                placeholder={isAr ? "اسم الهدف" : "Goal name"} 
+                placeholder={isAr ? "اسم الهدف" : "Goal name"}
                 className="bg-[#030d0a] border border-emerald-950 px-3 py-2 text-xs rounded-xl text-white"
                 required
               />
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={isAr ? goalTitleEn : goalTitleAr}
                 onChange={e => isAr ? setGoalTitleEn(e.target.value) : setGoalTitleAr(e.target.value)}
-                placeholder={isAr ? "اسم بديل (اختياري)" : "Alternative name (optional)"} 
+                placeholder={isAr ? "اسم بديل (اختياري)" : "Alternative name (optional)"}
                 className="bg-[#030d0a] border border-emerald-950 px-3 py-2 text-xs rounded-xl text-white"
               />
               <div className="relative">
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   value={goalTarget || ''}
-                  onChange={e => setGoalTarget(Number(e.target.value))}
-                  placeholder={isAr ? "المستهدف" : "Target"} 
+                  onChange={e => { setGoalTarget(Number(e.target.value)); if (goalTargetError) setGoalTargetError(null); }}
+                  placeholder={isAr ? "المستهدف" : "Target"}
                   className="bg-[#030d0a] border border-emerald-950 px-3 py-2.5 text-xs rounded-xl text-white w-full font-mono font-bold"
                   required
                 />
               </div>
+              {goalTargetError && (
+                <p className="text-[10px] text-rose-400 bg-rose-950/30 border border-rose-500/30 rounded-lg px-2.5 py-2 leading-relaxed">
+                  {goalTargetError}
+                </p>
+              )}
             </div>
-            
+
             <button type="submit" className="w-full py-2 bg-emerald-500 text-[#030d0a] text-xs font-bold rounded-xl">
               {editingGoalId ? (isAr ? "حفظ التعديلات" : "Save Changes") : (isAr ? "تأكيد وإنشاء الهدف" : "Create Goal")}
             </button>
