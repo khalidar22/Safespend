@@ -243,8 +243,13 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
 
   const handleSaveExpense = (e: React.FormEvent, andAddAnother: boolean) => {
     if (e) e.preventDefault();
-    const amt = parseFloat(expenseAmount);
-    if (isNaN(amt) || amt <= 0) return;
+    // C5/C6 fix: strip thousands-separator commas before parsing (so "1,500.50"
+    // parses as 1500.5 instead of parseFloat silently truncating at the comma
+    // to 1), and reject non-finite results (NaN or Infinity) instead of only NaN
+    // — parseFloat('1e400') is Infinity, which used to pass isNaN() and corrupt
+    // every derived total (leftPoolTotal, availableToday, leak stats) forever.
+    const amt = parseFloat(expenseAmount.replace(/,/g, ''));
+    if (!Number.isFinite(amt) || amt <= 0) return;
 
     if (amt > availableToday && !bypassWarning) {
       setShowExcessWarning(true);
@@ -279,8 +284,9 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
   };
 
   const handleConfirmExcess = () => {
-    const amt = parseFloat(expenseAmount);
-    if (isNaN(amt) || amt <= 0) return;
+    // C5/C6 fix: same comma-stripping + finite check as handleSaveExpense above.
+    const amt = parseFloat(expenseAmount.replace(/,/g, ''));
+    if (!Number.isFinite(amt) || amt <= 0) return;
     const selectedBox = savingBoxes[expenseCategoryIdx] || savingBoxes[0];
     onAddExpenseFromForm(
       amt, 

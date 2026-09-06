@@ -333,10 +333,18 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                  {/* C7 fix: the checkmark must reflect comm.paid, not !comm.paid.
+                      The old (inverted) logic showed a green checkmark on every
+                      commitment by default (paid=false), making a brand-new,
+                      never-touched row look already "confirmed" — so a user
+                      tapping it to review/select it instead silently created a
+                      real dated expense transaction via handleToggleCommitment
+                      and flipped it to paid. Now the checkmark only appears once
+                      the row is genuinely marked paid. */}
                   <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
-                    !comm.paid ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400' : 'border-slate-700 text-slate-400'
+                    comm.paid ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400' : 'border-slate-700 text-slate-400'
                   }`}>
-                    {!comm.paid ? <Check size={12} className="stroke-[3]" /> : <div className="w-1.5 h-1.5 bg-slate-700 rounded-full"></div>}
+                    {comm.paid ? <Check size={12} className="stroke-[3]" /> : <div className="w-1.5 h-1.5 bg-slate-700 rounded-full"></div>}
                   </div>
                   <div className="truncate">
                     <div className={`text-xs font-bold truncate ${comm.paid ? 'line-through text-slate-400' : 'text-slate-100'}`}>
