@@ -42,8 +42,14 @@ export function sumAmounts<T extends { amount: number }>(items: T[]): number {
  */
 export function getCycleBounds(salaryDay: number, cyclesAgo: number = 0): { cycleStart: Date; cycleEnd: Date } {
   const today = new Date();
+  // H8 fix: the setup UI only ever offers 1-31 (a fixed grid of day buttons), but
+  // salaryDay can also arrive from an imported backup file with no validation
+  // (see H20) or from stale/tampered localStorage. Without a floor, a 0 or
+  // negative day makes `new Date(y, m, d)` silently roll into a PRIOR month
+  // (JS Date arithmetic), shifting the whole salary cycle by a month without
+  // any error — corrupting every downstream spend-limit and report calculation.
   const clampDay = (y: number, m: number, d: number) =>
-    Math.min(d, new Date(y, m + 1, 0).getDate());
+    Math.max(1, Math.min(d, new Date(y, m + 1, 0).getDate()));
 
   const cYear = today.getFullYear();
   const cMonth = today.getMonth();

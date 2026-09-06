@@ -222,8 +222,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         <div className="mt-3 flex items-center justify-between text-[11px] text-emerald-500/50">
           <div>{formattedDate}</div>
           <div className="flex items-center gap-1">
+            {/* H3 fix: this app has no server/cloud backend (verified: no fetch/axios
+                anywhere in src) — "Live Sync" falsely implied data syncs somewhere.
+                It only ever meant "your changes are saved on this device", so say that. */}
             <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
-            <span>{isAr ? "المزامنة نشطة" : "Live Sync"}</span>
+            <span>{isAr ? "محفوظ تلقائياً على جهازك" : "Auto-Saved on This Device"}</span>
           </div>
         </div>
       </div>

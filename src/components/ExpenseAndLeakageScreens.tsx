@@ -887,9 +887,14 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
                     {isAr ? "تحذير: تجاوز الحد اليومي الآمن!" : "Warning: Over Safe Daily Limit!"}
                   </p>
                   <p>
-                    {isAr 
-                      ? `هذا المصروف (${formatMoney(expenseAmount, lang, currency)}) يتجاوز حدك المتاح لليوم (${formatMoney(availableToday, lang, currency)}). هل أنت متأكد من رغبتك في الاستمرار؟`
-                      : `This expense (${formatMoney(expenseAmount, lang, currency)}) exceeds your available safe daily limit of ${formatMoney(availableToday, lang, currency)}. Are you sure you want to proceed?`
+                    {/* H4 fix: this dialog used to always print the real amounts, even
+                        when the user has "Hide Balances" turned on elsewhere in the app
+                        specifically to keep numbers off-screen (e.g. in front of someone
+                        else) — a direct privacy leak through a path that bypassed the
+                        setting entirely. Now it masks the same way every other screen does. */}
+                    {isAr
+                      ? `هذا المصروف (${showBalances ? formatMoney(expenseAmount, lang, currency) : '•••'}) يتجاوز حدك المتاح لليوم (${showBalances ? formatMoney(availableToday, lang, currency) : '•••'}). هل أنت متأكد من رغبتك في الاستمرار؟`
+                      : `This expense (${showBalances ? formatMoney(expenseAmount, lang, currency) : '•••'}) exceeds your available safe daily limit of ${showBalances ? formatMoney(availableToday, lang, currency) : '•••'}. Are you sure you want to proceed?`
                     }
                   </p>
                 </div>
@@ -1245,9 +1250,25 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
               <Info size={14} />
               <span>{isAr ? "لا توجد بيانات كافية للتحليل بعد" : "Not enough data to analyze yet"}</span>
             </div>
-            {isAr 
+            {isAr
               ? "سجّل عملياتك والتزاماتك لهذا الشهر لتبدأ الشاشة بكشف تسرباتك."
               : "Record this month's transactions and commitments so this screen can reveal your leaks."}
+          </div>
+        ) : !hasLimits ? (
+          /* H9 fix: `hasLimits` was computed but never actually used — so with
+             transactions recorded but zero spending-category limits configured,
+             `topLeak` (which only ever looks at limited boxes) came back null and
+             this fell straight into the "no leak" success banner below, falsely
+             telling the user their spending is safe when leak detection literally
+             cannot run yet. This case now says that plainly instead. */
+          <div className="bg-gradient-to-r from-slate-500/10 to-transparent border-l-4 border-slate-500 p-4 rounded-r-xl rounded-l-md mb-5 text-xs text-slate-300 leading-normal">
+            <div className="font-bold text-slate-300 flex items-center gap-1.5 mb-1">
+              <Info size={14} />
+              <span>{isAr ? "لم تُحدَّد حدود إنفاق بعد" : "No spending limits set yet"}</span>
+            </div>
+            {isAr
+              ? "لا يمكن كشف التسرب المالي حتى تضع حداً لفئة إنفاق واحدة على الأقل — هذا لا يعني أن وضعك آمن."
+              : "Leak detection needs at least one spending category with a limit set — this doesn't mean your spending is safe."}
           </div>
         ) : !topLeak || topLeak.percent <= 100 ? (
           <div className="bg-gradient-to-r from-emerald-500/10 to-transparent border-l-4 border-emerald-500 p-4 rounded-r-xl rounded-l-md mb-5 text-xs text-slate-300 leading-normal">

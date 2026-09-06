@@ -519,17 +519,27 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   };
 
   const exportData = () => {
-    const dataStr = localStorage.getItem('safespend-v1');
-    if (!dataStr) return;
-    const blob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `safespend-backup-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // H23 fix: localStorage.getItem (and everything below it) ran with no error
+    // handling at all — a throwing getItem (private browsing, storage blocked)
+    // used to crash this handler uncaught. Now it fails visibly instead, reusing
+    // the existing "Data Maintenance" error banner rather than silently doing
+    // nothing or (pre-C12) taking the whole app down.
+    try {
+      const dataStr = localStorage.getItem('safespend-v1');
+      if (!dataStr) return;
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `safespend-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Error exporting data", err);
+      setImportError(isAr ? 'تعذّر تصدير البيانات. حاول مرة أخرى.' : 'Could not export data. Please try again.');
+    }
   };
 
   const importData = (event: React.ChangeEvent<HTMLInputElement>) => {

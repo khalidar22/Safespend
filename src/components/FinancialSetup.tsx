@@ -231,9 +231,10 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                 <input
                   type="number"
                   value={userSalary || ''}
-                  onChange={(e) => setUserSalary(Number(e.target.value))}
+                  onChange={(e) => setUserSalary(Math.max(0, Number(e.target.value)))}
                   className="w-full px-4 py-2.5 bg-[#051411] border border-emerald-950 rounded-xl text-xs text-white font-mono font-bold focus:outline-none focus:border-emerald-500"
                   placeholder="15000"
+                  min={1}
                 />
               </div>
             </div>
@@ -289,9 +290,19 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
             {isAr ? "رجوع" : "Back"}
           </button>
           
-          <button 
-            onClick={() => onNavigate('commitments_setup')}
-            className="flex-1 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-[#030d0a] text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1"
+          {/* H13 fix: previously navigated unconditionally, so leaving income at 0
+              (or never touching the field) silently carried a 0/negative salary
+              into every downstream calculation in the app (daily safe-spend,
+              leftover pool, reports...) with no warning at the one point where
+              catching it is cheap. */}
+          <button
+            onClick={() => { if (!userSalary || userSalary <= 0) return; onNavigate('commitments_setup'); }}
+            disabled={!userSalary || userSalary <= 0}
+            className={`flex-1 py-3.5 rounded-2xl text-[#030d0a] text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1 ${
+              !userSalary || userSalary <= 0
+                ? 'bg-emerald-500/30 cursor-not-allowed'
+                : 'bg-emerald-500 hover:bg-emerald-400'
+            }`}
           >
             <span>{isAr ? "متابعة" : "Continue"}</span>
             {isAr ? <ArrowLeft size={14} /> : <ArrowRight size={14} />}
