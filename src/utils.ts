@@ -57,6 +57,77 @@ export function todayLocalISO(): string {
 }
 
 /**
+ * H20 fix: validates that a parsed JSON backup file actually looks like a
+ * SafeSpend export before handleImportState is allowed to apply it to the
+ * live app state.
+ *
+ * Before this fix, `JSON.parse` succeeding was treated as proof the file was
+ * a valid backup — but any syntactically-valid JSON (an unrelated file, a
+ * hand-edited backup with a typo, `42`, `[]`, `{}`, ...) would pass straight
+ * through and get assigned directly into React state with no type checking.
+ * That could silently corrupt every screen (NaN propagating through every
+ * money calculation, `.map`/`.reduce` crashing on a field that used to be an
+ * array but now isn't, etc.) instead of being rejected with a clear message.
+ *
+ * This only checks the TYPE SHAPE of fields that are present (every field is
+ * optional, matching handleImportState's own "if present, apply it" logic) —
+ * it deliberately does not require every field, so a partial/older backup
+ * still imports.
+ */
+export function isValidBackupShape(parsed: unknown): boolean {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return false;
+  const p = parsed as Record<string, unknown>;
+
+  const isArr = (v: unknown) => Array.isArray(v);
+  const isFiniteNum = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+  const isStr = (v: unknown) => typeof v === 'string';
+  const isBool = (v: unknown) => typeof v === 'boolean';
+
+  const checks: [unknown, (v: unknown) => boolean][] = [
+    [p.lang, (v) => v === 'ar' || v === 'en'],
+    [p.showBalances, isBool],
+    [p.userName, isStr],
+    [p.userSalary, isFiniteNum],
+    [p.salaryDay, isFiniteNum],
+    [p.isPremium, isBool],
+    [p.zakatFeatureEnabled, isBool],
+    [p.savingBoxes, isArr],
+    [p.transactions, isArr],
+    [p.commitments, isArr],
+    [p.installments, isArr],
+    [p.familyMembers, isArr],
+    [p.goals, isArr],
+    [p.billSplits, isArr],
+    [p.linkedBankAccounts, isArr],
+    [p.kidsCards, isArr],
+  ];
+
+  for (const [value, check] of checks) {
+    if (value !== undefined && !check(value)) return false;
+  }
+
+  // Spot-check array ITEM shape too — an array of the wrong thing (e.g.
+  // strings instead of transaction objects) would otherwise still pass.
+  if (isArr(p.transactions)) {
+    for (const t of p.transactions as unknown[]) {
+      if (typeof t !== 'object' || t === null) return false;
+      const tx = t as Record<string, unknown>;
+      if (!isStr(tx.id) || !isFiniteNum(tx.amount) || !isStr(tx.date)) return false;
+      if (tx.type !== 'income' && tx.type !== 'expense') return false;
+    }
+  }
+  if (isArr(p.savingBoxes)) {
+    for (const b of p.savingBoxes as unknown[]) {
+      if (typeof b !== 'object' || b === null) return false;
+      const box = b as Record<string, unknown>;
+      if (!isStr(box.id) || !isFiniteNum(box.limit) || !isFiniteNum(box.spent)) return false;
+    }
+  }
+
+  return true;
+}
+
+/**
  * Computes the boundaries [start, end) of the current salary cycle.
  */
 export function getCycleBounds(salaryDay: number, cyclesAgo: number = 0): { cycleStart: Date; cycleEnd: Date } {

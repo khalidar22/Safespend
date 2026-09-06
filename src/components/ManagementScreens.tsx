@@ -40,7 +40,7 @@ import {
   LinkedBankAccount,
   KidsCard
 } from '../types';
-import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, projectBnplRatio, getZakatEstimate, computeEqualSplit, getTotalOwedToUser, buildSplitShareText, createDemoLinkedAccount, getLinkedAccountsTotal, createDemoKidsCard, todayLocalISO } from '../utils';
+import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, projectBnplRatio, getZakatEstimate, computeEqualSplit, getTotalOwedToUser, buildSplitShareText, createDemoLinkedAccount, getLinkedAccountsTotal, createDemoKidsCard, todayLocalISO, isValidBackupShape } from '../utils';
 import { CURRENCIES, getCurrency } from '../currencies';
 import { getProvidersForCurrency, getProvider } from '../bnplProviders';
 
@@ -549,8 +549,17 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     reader.onload = (e) => {
       try {
         const parsed = JSON.parse(e.target?.result as string);
-        if (parsed) {
+        // H20 fix: JSON.parse succeeding only proves the file is syntactically
+        // valid JSON — it says nothing about whether it's actually a
+        // SafeSpend backup. Without this check, any unrelated (but
+        // well-formed) JSON file would be applied directly to the app's
+        // state, silently corrupting balances/transactions instead of being
+        // rejected with a clear message.
+        if (parsed && isValidBackupShape(parsed)) {
+          setImportError(null);
           onImportState(parsed);
+        } else {
+          setImportError(isAr ? 'خطأ في قراءة ملف البيانات. تأكد أن الملف صحيح.' : 'Error reading data file. Please make sure the file is valid.');
         }
       } catch (err) {
         setImportError(isAr ? 'خطأ في قراءة ملف البيانات. تأكد أن الملف صحيح.' : 'Error reading data file. Please make sure the file is valid.');
