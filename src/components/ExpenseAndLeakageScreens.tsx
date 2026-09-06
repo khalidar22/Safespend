@@ -793,14 +793,17 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
             <label className="text-xs text-emerald-400 font-bold block mb-1.5">
               {isAr ? "فئة الإنفاق" : "Spending Category"}
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={isAr ? "فئة الإنفاق" : "Spending Category"}>
               {savingBoxes.map((box, idx) => (
-                <div
+                <button
                   key={box.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={expenseCategoryIdx === idx}
                   onClick={() => setExpenseCategoryIdx(idx)}
-                  className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-2 min-w-0 overflow-hidden ${
-                    expenseCategoryIdx === idx 
-                      ? 'bg-[#061d19] border-emerald-500 text-white' 
+                  className={`w-full text-start p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-2 min-w-0 overflow-hidden ${
+                    expenseCategoryIdx === idx
+                      ? 'bg-[#061d19] border-emerald-500 text-white'
                       : 'bg-emerald-950/10 border-emerald-950/50 text-slate-400'
                   }`}
                 >
@@ -810,7 +813,7 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
                   <span className="text-[10px] font-bold truncate min-w-0">
                     {isAr ? box.titleAr : box.titleEn}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           </div>

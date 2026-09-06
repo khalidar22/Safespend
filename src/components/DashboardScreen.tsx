@@ -403,7 +403,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       </div>
 
       {/* Widget: Leakage Alert */}
-      <div className="p-4" onClick={() => onNavigate('leakage')}>
+      <button
+        type="button"
+        onClick={() => onNavigate('leakage')}
+        aria-label={isAr ? `${leakLabelAr}، ${leakCategoryAr}، اضغط لعرض التفاصيل` : `${leakLabelEn}, ${leakCategoryEn}, tap for details`}
+        className="p-4 w-full text-start block"
+      >
         <div className={`bg-gradient-to-r transition-all duration-300 rounded-2xl p-4 flex items-center justify-between cursor-pointer shadow-md ${
           isOverLimit
             ? "from-[#1c0e0e] to-[#0a0505] border border-rose-900/70 hover:border-rose-800/50"
@@ -462,7 +467,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             )}
           </div>
         </div>
-      </div>
+      </button>
 
       {/* Saving Boxes Envelopes Preview */}
       <div className="px-4 mb-4">
@@ -482,10 +487,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           {liveSavingBoxes.slice(0, 2).map((box) => {
             const pct = box.limit > 0 ? Math.min(100, Math.round((box.spent / box.limit) * 100)) : 0;
             return (
-              <div 
-                key={box.id} 
+              <button
+                key={box.id}
+                type="button"
                 onClick={() => onNavigate('boxes')}
-                className="bg-[#051613] border border-emerald-950/60 rounded-xl p-3 cursor-pointer hover:bg-[#071d19] transition-all"
+                aria-label={isAr ? `${box.titleAr}، ${pct}% من الحد المخصص، اضغط لعرض التفاصيل` : `${box.titleEn}, ${pct}% of limit used, tap for details`}
+                className="bg-[#051613] border border-emerald-950/60 rounded-xl p-3 cursor-pointer hover:bg-[#071d19] transition-all w-full text-start block"
               >
                 <div className="flex justify-between items-center mb-1.5">
                   <span className="text-xs font-bold text-slate-200">
@@ -515,7 +522,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     {isAr ? "من" : "of"} {showBalances ? formatMoney(box.limit, lang, currency) : '•••'}
                   </span>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -541,10 +548,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
           <div className="flex flex-col gap-2">
             {unpaidCommitments.map((comm) => (
-              <div 
+              <button
                 key={comm.id}
+                type="button"
                 onClick={() => onNavigate('upcoming')}
-                className="flex items-center justify-between py-1.5 px-2 rounded-xl hover:bg-emerald-950/20 transition-all cursor-pointer"
+                aria-label={isAr
+                  ? `${comm.titleAr}، يستحق في ${comm.dueDate} ${curMonthAr}، اضغط لعرض التفاصيل`
+                  : `${comm.titleEn}, due on ${curMonthEn} ${comm.dueDate}, tap for details`}
+                className="w-full text-start flex items-center justify-between py-1.5 px-2 rounded-xl hover:bg-emerald-950/20 transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-2.5">
                   <div className="w-2.5 h-2.5 rounded-full bg-amber-500"></div>
@@ -562,11 +573,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     {showBalances ? formatMoney(comm.amount, lang, currency) : '•••'}
                   </div>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
-          
-          <button 
+
+          <button
             onClick={() => onNavigate('upcoming')}
             className="w-full text-center py-2 bg-emerald-950/40 text-emerald-400 text-xs font-bold rounded-xl border border-emerald-900/30 hover:bg-[#071f1a] transition-all mt-3"
           >

@@ -612,7 +612,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto pb-24" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => onNavigate('dashboard')} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30">
+          <button onClick={() => onNavigate('dashboard')} type="button" aria-label={isAr ? "رجوع" : "Back"} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center">
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-white">{isAr ? "الالتزامات القادمة" : "Upcoming Commitments"}</h2>
@@ -623,13 +623,24 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
         </p>
 
         <div className="flex flex-col gap-3">
+          {/* H17 fix: this whole card was a plain <div onClick>, so toggling a
+              commitment's paid status — a core financial action — was completely
+              unreachable by keyboard or screen reader. A real <button> gets
+              keyboard operability (Tab/Enter/Space) and semantics for free, plus
+              an aria-label describing the action (amount deliberately excluded
+              from the label so VoiceOver/TalkBack never announces a real balance
+              while "Hide Balances" is on). */}
           {commitments.map((comm) => (
-            <div 
+            <button
               key={comm.id}
+              type="button"
               onClick={() => handleTogglePaid(comm.id)}
-              className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
-                comm.paid 
-                  ? 'bg-emerald-950/10 border-emerald-950/40 text-slate-400 opacity-60' 
+              aria-label={isAr
+                ? `${comm.titleAr}، ${comm.paid ? 'مدفوع، اضغط للتراجع' : 'مستحق، اضغط لتأكيد الدفع'}`
+                : `${comm.titleEn}, ${comm.paid ? 'paid, tap to undo' : 'due, tap to mark paid'}`}
+              className={`w-full text-start p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+                comm.paid
+                  ? 'bg-emerald-950/10 border-emerald-950/40 text-slate-400 opacity-60'
                   : 'bg-[#051613] border-emerald-900/40 hover:border-emerald-500/30'
               }`}
             >
@@ -656,7 +667,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                   {comm.paid ? (isAr ? "تم الدفع" : "Paid") : (isAr ? "مستحق" : "Due")}
                 </span>
               </div>
-            </div>
+            </button>
           ))}
         </div>
         <div className="h-24 shrink-0" />
@@ -686,7 +697,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto pb-24" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => onNavigate('dashboard')} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30">
+          <button onClick={() => onNavigate('dashboard')} type="button" aria-label={isAr ? "رجوع" : "Back"} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center">
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-white">{isAr ? "الدفع لاحقاً والأقساط" : "Installments & Pay Later"}</h2>
@@ -945,7 +956,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto pb-24" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-4">
-          <button onClick={() => onNavigate('dashboard')} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30">
+          <button onClick={() => onNavigate('dashboard')} type="button" aria-label={isAr ? "رجوع" : "Back"} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center">
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-white">{isAr ? "وضع الأسرة المشترك" : "Family Shared Budget"}</h2>
@@ -1379,7 +1390,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto pb-24" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => onNavigate('dashboard')} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30">
+          <button onClick={() => onNavigate('dashboard')} type="button" aria-label={isAr ? "رجوع" : "Back"} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center">
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-white">{isAr ? "التقارير والتحليلات" : "Reports & Spending Analytics"}</h2>
@@ -1556,7 +1567,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto pb-24" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => onNavigate('dashboard')} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30">
+          <button onClick={() => onNavigate('dashboard')} type="button" aria-label={isAr ? "رجوع" : "Back"} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center">
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-white">{isAr ? "الأهداف المالية الذكية" : "Financial Goals Tracker"}</h2>
@@ -1827,7 +1838,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto pb-24" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => onNavigate('dashboard')} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30">
+          <button onClick={() => onNavigate('dashboard')} type="button" aria-label={isAr ? "رجوع" : "Back"} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center">
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-white">{isAr ? "قسمة الفواتير" : "Split Bills"}</h2>
@@ -2037,7 +2048,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto pb-24" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => onNavigate('dashboard')} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30">
+          <button onClick={() => onNavigate('dashboard')} type="button" aria-label={isAr ? "رجوع" : "Back"} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center">
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-white">{isAr ? "ربط الحسابات البنكية" : "Bank Linking"}</h2>
@@ -2138,7 +2149,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto pb-24" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => onNavigate('dashboard')} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30">
+          <button onClick={() => onNavigate('dashboard')} type="button" aria-label={isAr ? "رجوع" : "Back"} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center">
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-white">{isAr ? "الإعدادات والخصوصية" : "Settings & Privacy"}</h2>
@@ -2450,7 +2461,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-6 overflow-y-auto pb-24" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => onNavigate('dashboard')} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30">
+          <button onClick={() => onNavigate('dashboard')} type="button" aria-label={isAr ? "رجوع" : "Back"} className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center">
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-amber-500">{isAr ? "الاشتراك المميز" : "SafeSpend Premium"}</h2>
