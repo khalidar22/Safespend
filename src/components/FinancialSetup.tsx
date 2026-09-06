@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AppLanguage, ScreenId, Commitment, FinancialPersona } from '../types';
 import { FINANCIAL_PERSONAS } from '../mockData';
+import { todayLocalISO } from '../utils';
 
 interface FinancialSetupProps {
   screenId: ScreenId;
@@ -73,7 +74,7 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
         categoryEn: 'Commitments',
         amount: target.amount,
         type: 'expense' as const,
-        date: new Date().toISOString().slice(0, 10),
+        date: todayLocalISO(),
         icon: 'file-text',
       };
       setTransactions(prev => [newTx, ...prev]);

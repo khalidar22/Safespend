@@ -38,6 +38,25 @@ export function sumAmounts<T extends { amount: number }>(items: T[]): number {
 }
 
 /**
+ * H10/H11 fix: returns TODAY's date as "YYYY-MM-DD" using the device's LOCAL
+ * calendar day, not UTC. `new Date().toISOString().slice(0, 10)` looks
+ * equivalent but is not — toISOString() always converts to UTC first, so for
+ * any timezone ahead of UTC (Saudi Arabia and the rest of the Gulf are
+ * UTC+3/UTC+4), it silently returns YESTERDAY's date for the first few hours
+ * after local midnight. That caused new transactions/expenses to be saved
+ * with the wrong date, and "is this due today" checks to compare against the
+ * wrong day. Always use this helper (never toISOString) when you need
+ * "today" as a date string.
+ */
+export function todayLocalISO(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
  * Computes the boundaries [start, end) of the current salary cycle.
  */
 export function getCycleBounds(salaryDay: number, cyclesAgo: number = 0): { cycleStart: Date; cycleEnd: Date } {
@@ -395,7 +414,7 @@ function randomLast4(): string {
 }
 
 export function createDemoLinkedAccount(index: number, lang: AppLanguage): LinkedBankAccount {
-  const now = new Date().toISOString().slice(0, 10);
+  const now = todayLocalISO();
   return {
     id: `demo-acct-${Date.now()}-${index}`,
     labelAr: `حساب تجريبي ${index}`,

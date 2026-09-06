@@ -53,7 +53,7 @@ import {
   INITIAL_GOALS, 
   INITIAL_FAMILY_MEMBERS 
 } from './mockData';
-import { formatMoney, computeLiveSpent, getCycleBounds, sumAmounts } from './utils';
+import { formatMoney, computeLiveSpent, getCycleBounds, sumAmounts, todayLocalISO } from './utils';
 
 // Modular Screen Components
 import { DashboardScreen } from './components/DashboardScreen';
@@ -562,7 +562,7 @@ export default function App() {
       boxId: matchedBox?.id,
       amount,
       type: 'expense',
-      date: date || new Date().toISOString().split('T')[0],
+      date: date || todayLocalISO(),
       icon: matchedBox?.icon || 'coffee'
     };
     

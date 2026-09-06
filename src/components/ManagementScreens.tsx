@@ -40,7 +40,7 @@ import {
   LinkedBankAccount,
   KidsCard
 } from '../types';
-import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, projectBnplRatio, getZakatEstimate, computeEqualSplit, getTotalOwedToUser, buildSplitShareText, createDemoLinkedAccount, getLinkedAccountsTotal, createDemoKidsCard } from '../utils';
+import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, projectBnplRatio, getZakatEstimate, computeEqualSplit, getTotalOwedToUser, buildSplitShareText, createDemoLinkedAccount, getLinkedAccountsTotal, createDemoKidsCard, todayLocalISO } from '../utils';
 import { CURRENCIES, getCurrency } from '../currencies';
 import { getProvidersForCurrency, getProvider } from '../bnplProviders';
 
@@ -312,7 +312,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
       titleAr: splitTitle.trim(),
       titleEn: splitTitle.trim(),
       totalAmount: Number(splitTotal),
-      date: new Date().toISOString().slice(0, 10),
+      date: todayLocalISO(),
       participants,
     };
     setBillSplits(prev => [newSplit, ...prev]);
@@ -336,7 +336,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
         categoryEn: 'Bill Settlements',
         amount: participant.amountOwed,
         type: 'income' as const,
-        date: new Date().toISOString().slice(0, 10),
+        date: todayLocalISO(),
         icon: 'users',
       };
       setTransactions(prev => [newTx, ...prev]);
@@ -413,7 +413,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `SafeSpend-Zakat-Report-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `SafeSpend-Zakat-Report-${todayLocalISO()}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -463,7 +463,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
         categoryEn: 'Commitments',
         amount: target.amount,
         type: 'expense' as const,
-        date: new Date().toISOString().slice(0, 10),
+        date: todayLocalISO(),
         icon: 'file-text',
       };
       setTransactions(prev => [newTx, ...prev]);
@@ -493,7 +493,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
         categoryEn: 'Installments',
         amount: target.monthlyPayment,
         type: 'expense' as const,
-        date: new Date().toISOString().slice(0, 10),
+        date: todayLocalISO(),
         icon: 'credit-card',
       };
       setTransactions(prev => [newTx, ...prev]);
@@ -531,7 +531,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `safespend-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `safespend-backup-${todayLocalISO()}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1694,7 +1694,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                         setGoals(prev => prev.map(item => item.id === g.id ? { ...item, current: item.current + val } : item));
                         
                         // 2. Register saving transaction of type 'expense' with category 'Saving'
-                        const todayStr = new Date().toISOString().split('T')[0];
+                        const todayStr = todayLocalISO();
                         const newTx = {
                           id: `tx-saving-${Date.now()}`,
                           titleAr: `ادخار لـ ${g.titleAr}`,
