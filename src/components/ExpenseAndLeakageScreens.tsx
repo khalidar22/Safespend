@@ -140,7 +140,7 @@ interface ExpenseAndLeakageScreensProps {
   availableToday: number;
   currency: string;
   showBalances: boolean;
-  onAddExpenseFromForm: (amount: number, categoryEn: string, categoryAr: string, titleEn: string, titleAr: string, date: string) => void;
+  onAddExpenseFromForm: (amount: number, categoryEn: string, categoryAr: string, titleEn: string, titleAr: string, date: string, categoryId?: string) => void;
   commitments?: Commitment[];
   userSalary?: number;
   goals?: FinancialGoal[];
@@ -174,7 +174,13 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
 
   // State for Add Expense Form (Screen 9)
   const [expenseAmount, setExpenseAmount] = useState<string>('');
-  const [expenseCategoryIdx, setExpenseCategoryIdx] = useState<number>(1); // default to Restaurants
+  // H5/H6/H7 fix: store the selected saving box's stable `id`, not its array
+  // index/position. An index silently points at a DIFFERENT category after a
+  // box is deleted or the list is reordered elsewhere in the app (this state
+  // persists across screen navigation since this component stays mounted) —
+  // the form would then submit whatever category now happens to sit at that
+  // position without any indication to the user. An id is immune to that.
+  const [expenseCategoryId, setExpenseCategoryId] = useState<string>(() => savingBoxes[1]?.id || savingBoxes[0]?.id || ''); // default to Restaurants
   const [expenseNote, setExpenseNote] = useState<string>('');
   const [expenseDate, setExpenseDate] = useState<string>(() => {
     const d = new Date();
@@ -256,17 +262,20 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
       return;
     }
 
-    // Resolve category names
-    const selectedBox = savingBoxes[expenseCategoryIdx] || savingBoxes[0];
-    
+    // Resolve category by stable id (H5/H6/H7 fix) — falls back to the first
+    // box only if the previously-selected id no longer exists (e.g. its box
+    // was deleted while this form was open).
+    const selectedBox = savingBoxes.find(b => b.id === expenseCategoryId) || savingBoxes[0];
+
     // Call parent handler to register with the form's chosen date
     onAddExpenseFromForm(
-      amt, 
-      selectedBox.titleEn, 
-      selectedBox.titleAr, 
+      amt,
+      selectedBox.titleEn,
+      selectedBox.titleAr,
       expenseNote || (isAr ? `صرف ${selectedBox.titleAr}` : `Spent on ${selectedBox.titleEn}`),
       expenseNote || (isAr ? `صرف ${selectedBox.titleAr}` : `Spent on ${selectedBox.titleEn}`),
-      expenseDate
+      expenseDate,
+      selectedBox.id
     );
 
     setAddFeedback(isAr ? 'تم حفظ العملية بنجاح! ✓' : 'Transaction saved successfully! ✓');
@@ -287,14 +296,15 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
     // C5/C6 fix: same comma-stripping + finite check as handleSaveExpense above.
     const amt = parseFloat(expenseAmount.replace(/,/g, ''));
     if (!Number.isFinite(amt) || amt <= 0) return;
-    const selectedBox = savingBoxes[expenseCategoryIdx] || savingBoxes[0];
+    const selectedBox = savingBoxes.find(b => b.id === expenseCategoryId) || savingBoxes[0];
     onAddExpenseFromForm(
-      amt, 
-      selectedBox.titleEn, 
-      selectedBox.titleAr, 
+      amt,
+      selectedBox.titleEn,
+      selectedBox.titleAr,
       expenseNote || (isAr ? `صرف ${selectedBox.titleAr}` : `Spent on ${selectedBox.titleEn}`),
       expenseNote || (isAr ? `صرف ${selectedBox.titleAr}` : `Spent on ${selectedBox.titleEn}`),
-      expenseDate
+      expenseDate,
+      selectedBox.id
     );
     setAddFeedback(isAr ? 'تم حفظ العملية بنجاح! ✓' : 'Transaction saved successfully! ✓');
     setTimeout(() => setAddFeedback(''), 2500);
@@ -794,15 +804,15 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
               {isAr ? "فئة الإنفاق" : "Spending Category"}
             </label>
             <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={isAr ? "فئة الإنفاق" : "Spending Category"}>
-              {savingBoxes.map((box, idx) => (
+              {savingBoxes.map((box) => (
                 <button
                   key={box.id}
                   type="button"
                   role="radio"
-                  aria-checked={expenseCategoryIdx === idx}
-                  onClick={() => setExpenseCategoryIdx(idx)}
+                  aria-checked={expenseCategoryId === box.id}
+                  onClick={() => setExpenseCategoryId(box.id)}
                   className={`w-full text-start p-3 rounded-xl border cursor-pointer transition-all flex items-center gap-2 min-w-0 overflow-hidden ${
-                    expenseCategoryIdx === idx
+                    expenseCategoryId === box.id
                       ? 'bg-[#061d19] border-emerald-500 text-white'
                       : 'bg-emerald-950/10 border-emerald-950/50 text-slate-400'
                   }`}

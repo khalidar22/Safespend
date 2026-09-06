@@ -541,16 +541,23 @@ export default function App() {
 
   // Quick Simulation Action - Add Expense
   const handleAddExpense = (
-    amount: number, 
-    catEn: string, 
-    catAr: string, 
-    titleEn: string, 
+    amount: number,
+    catEn: string,
+    catAr: string,
+    titleEn: string,
     titleAr: string,
-    date?: string
+    date?: string,
+    categoryId?: string
   ) => {
-    // نطابق بالاسم مرة واحدة فقط — لحظة الإنشاء، حيث الاسم مطابق قطعاً —
-    // ثم نخزّن المُعرّف ليكون الرابط المستقر بعدها
-    const matchedBox = savingBoxes.find(b => b.titleEn === catEn || b.titleAr === catAr);
+    // H5/H6/H7 fix: the real "Add Expense" form now knows the exact box id
+    // the user selected and passes it through as `categoryId` — use that
+    // directly, which is unambiguous even if two boxes happen to share a
+    // title. Only fall back to matching by name for callers that don't have
+    // an id to give us (the three hardcoded "Quick Simulation" demo buttons
+    // below, which only ever pass fixed category name strings).
+    const matchedBox = categoryId
+      ? savingBoxes.find(b => b.id === categoryId)
+      : savingBoxes.find(b => b.titleEn === catEn || b.titleAr === catAr);
 
     // Add transaction to history
     const newTx: Transaction = {
