@@ -56,6 +56,23 @@ export function todayLocalISO(): string {
   return `${y}-${m}-${day}`;
 }
 
+// H16 fix: shared sort helper so every screen that lists commitments (the
+// dedicated "Upcoming Commitments" screen AND the Dashboard's preview widget)
+// orders them the same way — by how soon each is actually due — instead of
+// raw insertion order. `dueDate` only stores a day-of-month (e.g. "05", "28"),
+// so "how soon" means: how many days from today until that day-of-month next
+// occurs, wrapping into next month if this month's occurrence already passed.
+export function sortCommitmentsByDueProximity<T extends { dueDate: string }>(commitments: T[]): T[] {
+  const todayDay = new Date().getDate();
+  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+  const daysUntilDue = (dueDateStr: string): number => {
+    const raw = parseInt(dueDateStr, 10) || 1;
+    const d = Math.min(Math.max(raw, 1), daysInMonth);
+    return d >= todayDay ? d - todayDay : (daysInMonth - todayDay) + d;
+  };
+  return [...commitments].sort((a, b) => daysUntilDue(a.dueDate) - daysUntilDue(b.dueDate));
+}
+
 /**
  * H20 fix: validates that a parsed JSON backup file actually looks like a
  * SafeSpend export before handleImportState is allowed to apply it to the

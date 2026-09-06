@@ -19,7 +19,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { Transaction, SavingBox, Commitment, FamilyMember, AppLanguage } from '../types';
-import { formatMoney, computeLiveSpent, sumAmounts, getPersonaInsight } from '../utils';
+import { formatMoney, computeLiveSpent, sumAmounts, getPersonaInsight, sortCommitmentsByDueProximity } from '../utils';
 
 interface DashboardScreenProps {
   lang: AppLanguage;
@@ -147,7 +147,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     : "No category has passed its monthly limit.";
 
   const allUnpaidCommitments = commitments.filter(c => !c.paid);
-  const unpaidCommitments = allUnpaidCommitments.slice(0, 3);
+  // H16 fix: this preview only shows the first 3 items, so if they aren't
+  // sorted by due-date proximity first, "top 3" can show 3 arbitrary/old
+  // entries while hiding the one that's actually due soonest. Sorting before
+  // slicing guarantees the 3 shown here are truly the 3 most urgent, and
+  // matches the order used on the full "Upcoming Commitments" screen.
+  const unpaidCommitments = sortCommitmentsByDueProximity<Commitment>(allUnpaidCommitments).slice(0, 3);
   // Use the REAL live remaining balance instead of an approximated
   // (dailyAmount × daysLeft) multiplication — accurate even when today's
   // safe-spend ceiling is frozen for the day (rollover budgeting model).

@@ -40,7 +40,7 @@ import {
   LinkedBankAccount,
   KidsCard
 } from '../types';
-import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, projectBnplRatio, getZakatEstimate, computeEqualSplit, getTotalOwedToUser, buildSplitShareText, createDemoLinkedAccount, getLinkedAccountsTotal, createDemoKidsCard, todayLocalISO, isValidBackupShape } from '../utils';
+import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, projectBnplRatio, getZakatEstimate, computeEqualSplit, getTotalOwedToUser, buildSplitShareText, createDemoLinkedAccount, getLinkedAccountsTotal, createDemoKidsCard, todayLocalISO, isValidBackupShape, sortCommitmentsByDueProximity } from '../utils';
 import { CURRENCIES, getCurrency } from '../currencies';
 import { getProvidersForCurrency, getProvider } from '../bnplProviders';
 
@@ -635,21 +635,11 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
           {/* H16 fix: the screen's own text promises "bills and installments due
               within the next 30 days", but the list used to render `commitments`
               in raw insertion order — never sorted by how soon each one is due.
-              `dueDate` only stores a day-of-month (e.g. "05", "28"), so "how soon"
-              means: how many days from today until that day-of-month next occurs,
-              wrapping into next month if this month's occurrence already passed.
-              Sorting by that value ascending puts the most urgent/imminent
-              commitment first, matching what the screen's text tells the user. */}
-          {[...commitments].sort((a, b) => {
-            const todayDay = new Date().getDate();
-            const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-            const daysUntilDue = (dueDateStr: string) => {
-              const raw = parseInt(dueDateStr, 10) || 1;
-              const d = Math.min(Math.max(raw, 1), daysInMonth);
-              return d >= todayDay ? d - todayDay : (daysInMonth - todayDay) + d;
-            };
-            return daysUntilDue(a.dueDate) - daysUntilDue(b.dueDate);
-          }).map((comm) => (
+              sortCommitmentsByDueProximity() (utils.ts) puts the most urgent/
+              imminent commitment first, matching what the screen's text tells
+              the user. Same helper is used by the Dashboard's preview widget
+              for this exact list, so both places stay consistent. */}
+          {sortCommitmentsByDueProximity<Commitment>(commitments).map((comm) => (
             <button
               key={comm.id}
               type="button"
