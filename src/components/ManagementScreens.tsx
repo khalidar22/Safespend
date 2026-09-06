@@ -632,14 +632,24 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
         </p>
 
         <div className="flex flex-col gap-3">
-          {/* H17 fix: this whole card was a plain <div onClick>, so toggling a
-              commitment's paid status — a core financial action — was completely
-              unreachable by keyboard or screen reader. A real <button> gets
-              keyboard operability (Tab/Enter/Space) and semantics for free, plus
-              an aria-label describing the action (amount deliberately excluded
-              from the label so VoiceOver/TalkBack never announces a real balance
-              while "Hide Balances" is on). */}
-          {commitments.map((comm) => (
+          {/* H16 fix: the screen's own text promises "bills and installments due
+              within the next 30 days", but the list used to render `commitments`
+              in raw insertion order — never sorted by how soon each one is due.
+              `dueDate` only stores a day-of-month (e.g. "05", "28"), so "how soon"
+              means: how many days from today until that day-of-month next occurs,
+              wrapping into next month if this month's occurrence already passed.
+              Sorting by that value ascending puts the most urgent/imminent
+              commitment first, matching what the screen's text tells the user. */}
+          {[...commitments].sort((a, b) => {
+            const todayDay = new Date().getDate();
+            const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+            const daysUntilDue = (dueDateStr: string) => {
+              const raw = parseInt(dueDateStr, 10) || 1;
+              const d = Math.min(Math.max(raw, 1), daysInMonth);
+              return d >= todayDay ? d - todayDay : (daysInMonth - todayDay) + d;
+            };
+            return daysUntilDue(a.dueDate) - daysUntilDue(b.dueDate);
+          }).map((comm) => (
             <button
               key={comm.id}
               type="button"
