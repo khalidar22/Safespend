@@ -2308,7 +2308,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
           {/* C13: real Privacy & Terms modal (previously this row did nothing at all) */}
           {showPrivacyModal && (
             <div className="fixed inset-0 bg-[#020b09]/90 z-50 flex items-center justify-center p-4">
-              <div className="bg-[#03110d] rounded-3xl border border-emerald-950/85 p-6 w-full max-w-md max-h-[80vh] overflow-y-auto flex flex-col gap-4 shadow-2xl" dir={isAr ? 'rtl' : 'ltr'}>
+              <div className="bg-[#03110d] rounded-3xl border border-emerald-950/85 p-6 w-full max-w-sm max-h-[80vh] overflow-y-auto flex flex-col gap-4 shadow-2xl" dir={isAr ? 'rtl' : 'ltr'}>
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <Shield size={16} className="text-emerald-500" />
                   {isAr ? "سياسة الخصوصية والشروط" : "Privacy Policy & Terms"}
