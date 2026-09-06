@@ -155,6 +155,18 @@ export default function App() {
   
   // Calculations
   const [availableToday, setAvailableToday] = useState<number>(0);
+  // H15 fix: the "Daily Limit" screen's calculation-breakdown card used to
+  // recompute its own approximate version of this math from scratch (whole
+  // month's spending divided by days remaining) instead of the actual
+  // frozen-ceiling-minus-spent-today model used for `availableToday` above.
+  // Those two formulas are NOT algebraically equivalent whenever something
+  // has been spent today and more than one day remains in the cycle, so the
+  // breakdown card's numbers never summed to the big number shown on the
+  // very same screen. Exposing the exact frozen daily base and today's spend
+  // that were actually used to produce `availableToday` lets the breakdown
+  // card show the real arithmetic instead of a different, mismatching one.
+  const [todaysDailyBaseForBreakdown, setTodaysDailyBaseForBreakdown] = useState<number>(0);
+  const [spentTodayForBreakdown, setSpentTodayForBreakdown] = useState<number>(0);
   const [daysToSalary, setDaysToSalary] = useState<number>(12);
   // Today's safe-to-spend ceiling is frozen once per day (rollover budgeting model,
   // matching real-world apps like BUDGT/Monefy/Spendersson): it's calculated ONCE at
@@ -533,6 +545,11 @@ export default function App() {
       : Math.max(0, leftPoolBeforeToday / divisor);
 
     setAvailableToday(parseFloat(Math.max(0, currentDailyBase - spentToday).toFixed(2)));
+    // H15 fix: publish the exact two numbers that were just used above, so the
+    // "Daily Limit" breakdown screen can show real arithmetic that actually
+    // sums to `availableToday` instead of recomputing a different formula.
+    setTodaysDailyBaseForBreakdown(parseFloat(currentDailyBase.toFixed(2)));
+    setSpentTodayForBreakdown(parseFloat(spentToday.toFixed(2)));
   }, [userSalary, debouncedSalaryForFreeze, commitments, goals, transactions, daysToSalary]);
 
   // Helper sums for dashboard
@@ -811,6 +828,8 @@ export default function App() {
                   savingBoxes={savingBoxes}
                   setSavingBoxes={setSavingBoxes}
                   availableToday={availableToday}
+                  todaysDailyBaseForBreakdown={todaysDailyBaseForBreakdown}
+                  spentTodayForBreakdown={spentTodayForBreakdown}
                   currency={currency}
                   showBalances={showBalances}
                   onAddExpenseFromForm={handleAddExpense}

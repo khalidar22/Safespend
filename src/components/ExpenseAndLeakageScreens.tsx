@@ -138,6 +138,12 @@ interface ExpenseAndLeakageScreensProps {
   savingBoxes: SavingBox[];
   setSavingBoxes: React.Dispatch<React.SetStateAction<SavingBox[]>>;
   availableToday: number;
+  // H15 fix: the exact frozen daily base and today's spend that App.tsx
+  // actually used to derive `availableToday` — needed so the "Daily Limit"
+  // breakdown card's arithmetic genuinely sums to that same number, instead
+  // of recomputing a different (whole-month) formula that never matched it.
+  todaysDailyBaseForBreakdown?: number;
+  spentTodayForBreakdown?: number;
   currency: string;
   showBalances: boolean;
   onAddExpenseFromForm: (amount: number, categoryEn: string, categoryAr: string, titleEn: string, titleAr: string, date: string, categoryId?: string) => void;
@@ -159,6 +165,8 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
   savingBoxes,
   setSavingBoxes,
   availableToday,
+  todaysDailyBaseForBreakdown = 0,
+  spentTodayForBreakdown = 0,
   currency,
   showBalances,
   onAddExpenseFromForm,
@@ -1128,16 +1136,23 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
       (commitments || []).filter(c => c.active !== false && !c.paid)
     );
 
-    const { cycleStart: dl_cycleStart, cycleEnd: dl_cycleEnd } = getCycleBounds(salaryDay);
-    const spentThisMonth = sumAmounts(
-      transactions.filter(t => {
-        if (t.type !== 'expense') return false;
-        const tDate = new Date(t.date);
-        return tDate >= dl_cycleStart && tDate < dl_cycleEnd;
-      })
-    );
-
-    const leftoverPool = Math.max(0, userSalary - unpaidCommitmentsSum - spentThisMonth);
+    // H15 fix: this card used to recompute a SEPARATE, simpler formula here
+    // (whole month's spending divided by days remaining) that looked similar
+    // to — but was mathematically never equal to — the actual frozen-ceiling
+    // model used for the big "Available Daily Safe Spend" number at the top
+    // of this very screen. Concretely: the real model computes today's base
+    // from spending BEFORE today only, divides that once, then subtracts
+    // today's spending as a flat amount; the old card instead divided
+    // (income − bills − the WHOLE month's spending including today) by the
+    // days remaining — subtracting today's spend through the divisor instead
+    // of after it. Those only coincide when nothing has been spent yet today
+    // or exactly one day remains, so in every other case the two numbers on
+    // the same screen visibly disagreed. The breakdown below now walks
+    // through the SAME frozen-base-minus-spent-today arithmetic App.tsx
+    // actually used, using the exact values it computed, so it always sums
+    // to the number shown above.
+    const dailyBase = todaysDailyBaseForBreakdown;
+    const spentToday = spentTodayForBreakdown;
 
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto overflow-x-hidden pb-24" dir={isAr ? 'rtl' : 'ltr'}>
@@ -1176,27 +1191,38 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
             <span className="text-slate-400">{isAr ? "الدخل الشهري المقيد" : "Assigned Monthly Income"}</span>
             <span className="font-bold font-mono text-white">{showBalances ? formatMoney(userSalary, lang, currency) : '•••'}</span>
           </div>
-          
+
           <div className="flex justify-between items-center py-1.5 border-b border-emerald-950/40">
             <span className="text-slate-400">{isAr ? "الالتزامات المحجوزة (-)" : "Bills Locked (-)"}</span>
             <span className="font-bold font-mono text-amber-500">-{showBalances ? formatMoney(unpaidCommitmentsSum, lang, currency) : '•••'}</span>
           </div>
 
           <div className="flex justify-between items-center py-1.5 border-b border-emerald-950/40">
-            <span className="text-slate-400">{isAr ? "المنفق الفعلي حتى الآن (-)" : "Spent This Month (-)"}</span>
-            <span className="font-bold font-mono text-rose-400">-{showBalances ? formatMoney(spentThisMonth, lang, currency) : '•••'}</span>
-          </div>
-
-          <div className="flex justify-between items-center py-1.5 border-b border-emerald-950/40">
-            <span className="text-slate-400">{isAr ? "المتاح الكلي المتبقي" : "Total Leftover Pool"}</span>
-            <span className="font-bold font-mono text-white">{showBalances ? formatMoney(leftoverPool, lang, currency) : '•••'}</span>
-          </div>
-
-          <div className="flex justify-between items-center py-1.5">
             <span className="text-slate-400">{isAr ? "تقسيم على الأيام المتبقية (/)" : "Divide by Days Left (/)"}</span>
             <span className="font-bold font-mono text-white">{daysToSalary} {isAr ? "يوم" : "Days"}</span>
           </div>
+
+          <div className="flex justify-between items-center py-1.5 border-b border-emerald-950/40">
+            <span className="text-slate-400">{isAr ? "= سقف اليوم قبل صرف اليوم" : "= Today's Ceiling Before Today's Spending"}</span>
+            <span className="font-bold font-mono text-white">{showBalances ? formatMoney(dailyBase, lang, currency) : '•••'}</span>
+          </div>
+
+          <div className="flex justify-between items-center py-1.5 border-b border-emerald-950/40">
+            <span className="text-slate-400">{isAr ? "المصروف فعلياً اليوم (-)" : "Spent Today (-)"}</span>
+            <span className="font-bold font-mono text-rose-400">-{showBalances ? formatMoney(spentToday, lang, currency) : '•••'}</span>
+          </div>
+
+          <div className="flex justify-between items-center py-1.5">
+            <span className="text-slate-400 font-bold">{isAr ? "= المتاح للإنفاق اليوم" : "= Available to Spend Today"}</span>
+            <span className="font-bold font-mono text-emerald-400">{showBalances ? formatMoney(Math.max(0, dailyBase - spentToday), lang, currency) : '•••'}</span>
+          </div>
         </div>
+
+        <p className="text-[10px] text-slate-500 mt-2 leading-normal">
+          {isAr
+            ? "ملاحظة: سقف اليوم (قبل صرف اليوم) يُحسب مرة واحدة فقط عند بداية كل يوم من الرصيد المتبقي بعد خصم الالتزامات وما أُنفق قبل اليوم، ثم لا يتغيّر إلا في اليوم التالي — لهذا لا يهتز الرقم للأسفل كلما سجّلت مصروفاً جديداً اليوم."
+            : "Note: today's ceiling (before today's spending) is calculated once at the start of each day from what's left after bills and prior spending, then stays fixed until tomorrow — so it never shrinks retroactively as you log more expenses today."}
+        </p>
 
         <div className="mt-4 p-4 rounded-xl bg-emerald-950/10 border border-emerald-950/60 flex items-start gap-2.5 text-xs text-slate-300 leading-relaxed">
           <Info size={18} className="text-emerald-400 shrink-0 mt-0.5" />
