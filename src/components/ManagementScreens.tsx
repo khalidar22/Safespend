@@ -204,15 +204,11 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
 
   const handleSaveInstallment = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!instTitle.trim() || !instTotal || !instPayments || instPayments < 1) return;
+    if (!instTitle.trim() || !instTotal || !instPayments || instPayments < 1 || !Number.isInteger(Number(instPayments))) return;
     const total = Number(instTotal);
     const monthlyPayment = Math.round((total / Number(instPayments)) * 100) / 100;
 
     if (editingInstallmentId) {
-      const target = installments.find(i => i.id === editingInstallmentId);
-      let updatedLinkedTxId: string | undefined;
-      let newPaidAmount = 0;
-
       setInstallments(prev => prev.map(i => {
         if (i.id !== editingInstallmentId) return i;
         // Recompute remainingPayments from how many payments were ACTUALLY made so far
@@ -221,17 +217,17 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
         const paidCount = i.totalPayments - i.remainingPayments;
         const newTotalPayments = Number(instPayments);
         const newRemaining = Math.max(0, newTotalPayments - paidCount);
-        // Re-value what's "paid so far" using the NEW monthly payment, so every
-        // number on the card stays internally consistent with the edited plan.
-        // Capped at `total`: when the payment count is reduced a lot (e.g. 12 -> 4
-        // payments already 10 paid), the new higher monthly rate applied to the old
-        // paid-count could otherwise produce a paidAmount that exceeds the plan's
-        // total — which then shows an impossible negative "remaining" amount and
-        // silently understates the aggregate BNPL debt total elsewhere on this
-        // screen (see C2 in the reviewed open-items list). A plan can never be
-        // more than 100% paid.
-        newPaidAmount = Math.min(total, Math.round(paidCount * monthlyPayment * 100) / 100);
-        updatedLinkedTxId = i.linkedTxId;
+        // C3/C4 fix: never RECOMPUTE "paid so far" from paidCount x a (possibly
+        // new) monthly rate — that fabricates a number that no longer matches
+        // the real transactions already recorded (each past payment happened
+        // at ITS OWN rate at the time, via handleToggleInstallment, which keeps
+        // paidAmount and the transaction ledger in exact sync). The only
+        // correct edit here is to keep the real, historical paidAmount as-is
+        // and simply clamp it so it can never exceed the plan's new total
+        // (a plan can never be more than 100% paid). This also means we must
+        // NOT retroactively rewrite the amount of any already-created
+        // transaction (that would itself re-introduce the same mismatch).
+        const newPaidAmount = Math.min(total, i.paidAmount);
         return {
           ...i,
           titleAr: instTitle,
@@ -244,15 +240,6 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
           providerId: instProviderId,
         };
       }));
-
-      // If this cycle's payment is still linked to a live transaction, re-value
-      // that transaction too — otherwise the ledger would silently disagree
-      // with the card (old amount vs. new re-valued amount).
-      if (updatedLinkedTxId) {
-        const linkedId = updatedLinkedTxId;
-        const perPaymentAmount = monthlyPayment;
-        setTransactions(prev => prev.map(t => t.id === linkedId ? { ...t, amount: perPaymentAmount } : t));
-      }
     } else {
       const newInstallment: Installment = {
         id: `inst-${Date.now()}`,
@@ -757,11 +744,12 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                 <input
                   type="number"
                   value={instPayments}
-                  onChange={e => setInstPayments(e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
+                  onChange={e => setInstPayments(e.target.value === '' ? '' : Math.max(1, Math.round(Number(e.target.value))))}
                   placeholder={isAr ? "مثال: 4" : "e.g. 4"}
                   className="bg-[#030d0a] border border-emerald-950 px-3 py-2 text-xs rounded-xl text-white"
                   required
                   min={1}
+                  step={1}
                 />
               </div>
             </div>
