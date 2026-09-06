@@ -238,10 +238,20 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
           <h2 className="text-xl font-bold text-white tracking-tight">
             {isAr ? "لا تقع في فخ الأقساط" : "Never fall into the installment trap"}
           </h2>
+          {/* H21 fix: "BNPL" and "Zakat" were used as unexplained jargon on this
+              very first value-prop screen — before a new user has any other
+              context in the app to learn what either term means. A brief
+              parenthetical/appositive definition for each (kept currency- and
+              provider-agnostic, since the app supports multiple BNPL providers
+              across multiple currencies — see bnplProviders.ts) makes the
+              screen understandable on its own, without needing a separate
+              tooltip/modal component. The 2.5% Zakat rate mentioned here
+              matches the exact rate the app itself uses in getZakatEstimate()
+              (utils.ts), so this stays consistent with the real calculation. */}
           <p className="text-xs text-slate-400 max-w-xs mt-3 leading-relaxed">
             {isAr
-              ? "حارس الدفع الآجل يحذّرك قبل أي قسط يتجاوز حدك الآمن، مع صندوق زكاة اختياري يحسب التزامك الشرعي إذا فعّلته — تطبيق مبني حول حمايتك، لا مجرد جدول مصروفات."
-              : "BNPL Guardian warns you before any installment crosses your safe limit, with an optional Zakat box you can enable to track your religious obligation — built around protecting you, not just another spending tracker."}
+              ? "حارس \"الدفع الآجل\" (BNPL — خدمات التقسيط مثل تابي وتمارا) يحذّرك قبل أي قسط يتجاوز حدك الآمن، مع صندوق \"الزكاة\" الاختياري — الفريضة الشرعية بإخراج نسبة من المدخرات (2.5% سنوياً) — يحسبها لك تلقائياً إذا فعّلته. تطبيق مبني حول حمايتك، لا مجرد جدول مصروفات."
+              : "BNPL (Buy Now, Pay Later — installment services like Tabby, Tamara, and Klarna) Guardian warns you before any installment crosses your safe limit, plus an optional Zakat box — the Islamic obligation to give a portion of savings (2.5% annually) — that automatically calculates it for you if you enable it. Built around protecting you, not just another spending tracker."}
           </p>
         </div>
 
