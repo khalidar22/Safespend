@@ -66,12 +66,18 @@ export default function App() {
   // Helper to load state from safespend-v1
   const getSavedState = () => {
     if (typeof window === 'undefined') return null;
-    const data = localStorage.getItem('safespend-v1');
-    if (!data) return null;
+    // C10 fix: localStorage.getItem itself can throw (private/incognito browsing,
+    // an iframe with storage blocked, or strict privacy settings that disable
+    // Storage entirely) — not just JSON.parse. The old code only guarded the
+    // parse step, so a throwing getItem crashed the whole app to a blank white
+    // screen on first load (there is no Error Boundary — see C12). Now the
+    // access itself is inside the try too.
     try {
+      const data = localStorage.getItem('safespend-v1');
+      if (!data) return null;
       return JSON.parse(data);
     } catch (e) {
-      console.error("Error parsing saved state", e);
+      console.error("Error reading saved state", e);
       return null;
     }
   };
@@ -233,7 +239,17 @@ export default function App() {
       frozenWithSalary,
       freezeMethodVersion,
     };
-    localStorage.setItem('safespend-v1', JSON.stringify(stateToSave));
+    // C11 fix: this is the most-frequently-run save path (fires after every
+    // expense/commitment/installment change), yet unlike the saveOnExit effect
+    // below it had no try/catch. A full localStorage — QuotaExceededError after
+    // years of transaction history, or a private-browsing quota of 0 — used to
+    // throw here uncaught and crash the whole app to a blank white screen (no
+    // Error Boundary — see C12) on literally the next user action.
+    try {
+      localStorage.setItem('safespend-v1', JSON.stringify(stateToSave));
+    } catch (e) {
+      console.error("Error auto-saving state", e);
+    }
   }, [
     lang,
     currency,

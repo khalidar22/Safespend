@@ -81,11 +81,11 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
 
           <div className="flex flex-col gap-3 max-w-xs mt-6 text-center">
             <p className="text-sm text-slate-300 leading-relaxed font-medium">
-              The app that warns you before a Buy-Now-Pay-Later plan crosses your safe limit — and keeps your Zakat on track automatically
+              The app that warns you before a Buy-Now-Pay-Later plan crosses your safe limit — with an optional Zakat tracker if you need one
             </p>
             <div className="w-16 h-[1px] bg-emerald-950/80 mx-auto my-1"></div>
             <p className="text-xs text-slate-400 leading-relaxed" dir="rtl">
-              يحذّرك قبل أن يتجاوز أي قسط دفع آجل حدك الآمن، ويحسب زكاتك تلقائياً — لست تطبيق ميزانية عام
+              يحذّرك قبل أن يتجاوز أي قسط دفع آجل حدك الآمن، مع حاسبة زكاة اختيارية عند الحاجة — لست تطبيق ميزانية عام
             </p>
           </div>
         </div>
@@ -240,8 +240,8 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
           </h2>
           <p className="text-xs text-slate-400 max-w-xs mt-3 leading-relaxed">
             {isAr
-              ? "حارس الدفع الآجل يحذّرك قبل أي قسط يتجاوز حدك الآمن، وصندوق الزكاة يحسب التزامك الشرعي تلقائياً — تطبيق مبني حول حمايتك، لا مجرد جدول مصروفات."
-              : "BNPL Guardian warns you before any installment crosses your safe limit, and the built-in Zakat box tracks your religious obligation automatically — built around protecting you, not just another spending tracker."}
+              ? "حارس الدفع الآجل يحذّرك قبل أي قسط يتجاوز حدك الآمن، مع صندوق زكاة اختياري يحسب التزامك الشرعي إذا فعّلته — تطبيق مبني حول حمايتك، لا مجرد جدول مصروفات."
+              : "BNPL Guardian warns you before any installment crosses your safe limit, with an optional Zakat box you can enable to track your religious obligation — built around protecting you, not just another spending tracker."}
           </p>
         </div>
 

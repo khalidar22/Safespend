@@ -183,6 +183,12 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   const [instPayments, setInstPayments] = useState<number | ''>(4);
   const [instProviderId, setInstProviderId] = useState<string>('other');
   const [installmentToDelete, setInstallmentToDelete] = useState<Installment | null>(null);
+  // C13 fix: the old "Terms & Privacy Agreement" row was a plain, non-interactive
+  // <div> with no onClick/href and no policy text anywhere in the codebase (verified
+  // by grep across src for any privacy/terms copy — none existed). This modal is the
+  // actual, real policy content, matching how the app genuinely handles data today
+  // (100% local-only storage, confirmed by grep: no fetch/axios/network calls in src).
+  const [showPrivacyModal, setShowPrivacyModal] = useState<boolean>(false);
 
   const handleStartAddInstallment = () => {
     setEditingInstallmentId(null);
@@ -2289,11 +2295,53 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
               <HelpCircle size={14} className="text-emerald-500" />
               <span>{isAr ? "مركز الدعم والمساعدة" : "SafeSpend Help Center"}</span>
             </div>
-            <div className="flex items-center gap-2 text-slate-300 py-1">
+            <button
+              type="button"
+              onClick={() => setShowPrivacyModal(true)}
+              className="flex items-center gap-2 text-slate-300 py-1 w-full text-right hover:text-emerald-400 transition-colors cursor-pointer"
+            >
               <Shield size={14} className="text-emerald-500" />
               <span>{isAr ? "سياسة الخصوصية والشروط" : "Terms & Privacy Agreement"}</span>
-            </div>
+            </button>
           </div>
+
+          {/* C13: real Privacy & Terms modal (previously this row did nothing at all) */}
+          {showPrivacyModal && (
+            <div className="fixed inset-0 bg-[#020b09]/90 z-50 flex items-center justify-center p-4">
+              <div className="bg-[#03110d] rounded-3xl border border-emerald-950/85 p-6 w-full max-w-md max-h-[80vh] overflow-y-auto flex flex-col gap-4 shadow-2xl" dir={isAr ? 'rtl' : 'ltr'}>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Shield size={16} className="text-emerald-500" />
+                  {isAr ? "سياسة الخصوصية والشروط" : "Privacy Policy & Terms"}
+                </h3>
+                <div className="text-[11px] text-slate-300 leading-relaxed flex flex-col gap-3">
+                  {isAr ? (
+                    <>
+                      <p><strong className="text-emerald-400">أين تُحفظ بياناتك:</strong> جميع بياناتك (المعاملات، الميزانيات، الأهداف، الأقساط) تُخزَّن محلياً فقط على جهازك (localStorage)، ولا تُرسَل أو تُخزَّن على أي خادم خارجي. هذا وضع تجريبي/محاكاة (Simulator) لا يتطلب حساباً أو اتصالاً بالإنترنت لعمله.</p>
+                      <p><strong className="text-emerald-400">المشاركة مع أطراف ثالثة:</strong> لا تُشارك بياناتك مع أي طرف ثالث، ولا تُستخدم لأي غرض تسويقي، لأنها لا تغادر جهازك أصلاً.</p>
+                      <p><strong className="text-emerald-400">حذف بياناتك:</strong> يمكنك حذف كل بياناتك بالكامل في أي وقت من "صيانة البيانات" أدناه (إعادة التعيين)، أو بمسح بيانات الموقع من إعدادات متصفحك.</p>
+                      <p><strong className="text-emerald-400">حقوقك بموجب نظام حماية البيانات الشخصية السعودي (PDPL):</strong> لديك الحق الكامل بالوصول لبياناتك (عبر "تصدير البيانات")، وتصحيحها، وحذفها — وبما أن التخزين محلي بالكامل، هذه الحقوق متاحة لك مباشرة وفورياً بلا حاجة لطلب من أي جهة.</p>
+                      <p className="text-slate-500 text-[10px]">آخر تحديث: سبتمبر 2026.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p><strong className="text-emerald-400">Where your data lives:</strong> All your data (transactions, budgets, goals, installments) is stored locally on your device only (localStorage). Nothing is sent to or stored on any external server. This is a simulator that needs no account or internet connection to function.</p>
+                      <p><strong className="text-emerald-400">Third-party sharing:</strong> Your data is never shared with any third party and is never used for marketing, because it never leaves your device.</p>
+                      <p><strong className="text-emerald-400">Deleting your data:</strong> You can delete all your data at any time from "Data Maintenance" below (Reset), or by clearing this site's data in your browser settings.</p>
+                      <p><strong className="text-emerald-400">Your rights under Saudi PDPL:</strong> You have full rights to access your data (via "Export Data"), correct it, and delete it — and since storage is fully local, these rights are immediately available to you without needing to request anything from anyone.</p>
+                      <p className="text-slate-500 text-[10px]">Last updated: September 2026.</p>
+                    </>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowPrivacyModal(false)}
+                  className="mt-1 py-2.5 w-full bg-emerald-500 hover:bg-emerald-400 text-[#030d0a] text-xs font-bold rounded-xl transition-all"
+                >
+                  {isAr ? "إغلاق" : "Close"}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Section 4: Data Maintenance (Export / Import / Reset) */}
           <div className="bg-[#051613] rounded-2xl border border-rose-950/40 p-4 flex flex-col gap-3 text-xs">

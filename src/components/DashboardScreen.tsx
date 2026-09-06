@@ -173,17 +173,19 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           </div>
           
           <div className="flex items-center gap-2">
-            <button 
+            <button
               onClick={toggleShowBalances}
               className="p-2 rounded-xl bg-emerald-950/50 border border-emerald-900/40 text-emerald-400 hover:bg-emerald-900/40 transition-colors"
               title={isAr ? "إظهار/إخفاء المبالغ" : "Show/Hide Balances"}
+              aria-label={isAr ? "إظهار/إخفاء المبالغ" : "Show/Hide Balances"}
             >
               {showBalances ? <Eye size={16} /> : <EyeOff size={16} />}
             </button>
-            <button 
+            <button
               onClick={() => onNavigate('notifications')}
               className="p-2 rounded-xl bg-emerald-950/50 border border-emerald-900/40 text-emerald-400 hover:bg-emerald-900/40 transition-colors relative"
               title={isAr ? "التنبيهات والإنذارات" : "Alerts & Notifications"}
+              aria-label={isAr ? "التنبيهات والإنذارات" : "Alerts & Notifications"}
             >
               <Bell size={16} />
               {(() => {
