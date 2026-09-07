@@ -127,22 +127,20 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
     setShowAddCustom(false);
   };
 
-  // H14 fix: adds a suggested bill directly (amount=0 placeholder, editable
-  // right on the row afterward) — a plain state update, same shape as
-  // handleAddCustomCommitment above, deliberately NOT handleToggleCommitment
-  // (which creates a real dated expense transaction and is meant for the
-  // live "mark this bill as paid" flow, not initial setup).
-  const handleAddSuggestedCommitment = (s: { titleEn: string; titleAr: string; category: string }) => {
-    const newComm: Commitment = {
-      id: `suggested-comm-${Date.now()}-${s.titleEn.replace(/\s+/g, '-')}`,
-      titleEn: s.titleEn,
-      titleAr: s.titleAr,
-      amount: 0,
-      dueDate: '1',
-      paid: false,
-      category: s.category,
-    };
-    setCommitments(prev => [...prev, newComm]);
+  // H14 fix (v2): tapping a suggestion chip no longer injects a commitment
+  // directly with a hardcoded amount (0) and due date ('1') — the user
+  // correctly pointed out that gave no way to set the real due day (only
+  // the amount was editable afterward), while the existing "+ Add Custom
+  // Bill" form ("إضافة التزام آخر") already has BOTH an amount field and a
+  // due-day field ("يوم الاستحقاق (١-٣١)"). So instead we now pre-fill that
+  // exact same form with the suggestion's title and open it, reusing its
+  // existing amount + due-day inputs and its existing submit handler
+  // (handleAddCustomCommitment) — one single source of truth for adding any
+  // commitment, suggested or custom.
+  const handleSelectSuggestedCommitment = (s: { titleEn: string; titleAr: string; category: string }) => {
+    setCustomTitleEn(s.titleEn);
+    setCustomTitleAr(s.titleAr);
+    setShowAddCustom(true);
   };
 
   const getPersonaIcon = (iconName: string) => {
@@ -370,10 +368,14 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
               : "Check your recurring debts and fixed bills. These are locked to shield you from accidentally overspending:"}
           </p>
 
-          {/* H14 fix: quick-add suggestions so this mandatory step has real
+          {/* H14 fix (v2): quick-add suggestions so this mandatory step has real
               content to interact with for every new user, not just an empty
               list. Only shows suggestions not already added (by title), so
-              the row disappears once tapped instead of offering a duplicate. */}
+              the row disappears once added instead of offering a duplicate.
+              Tapping a chip pre-fills + opens the "+ Add Custom Bill" form
+              below (handleSelectSuggestedCommitment) so the user sets the
+              real amount AND due day right there, instead of a chip
+              silently injecting a commitment with a hardcoded due date. */}
           {(() => {
             const remainingSuggestions = SUGGESTED_COMMITMENTS.filter(
               s => !commitments.some(c => c.titleEn === s.titleEn)
@@ -382,14 +384,14 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
             return (
               <div className="mb-3">
                 <span className="text-[9px] text-emerald-500/80 font-bold px-1 block mb-1.5">
-                  {isAr ? "اقتراحات سريعة — اضغط للإضافة" : "Quick suggestions — tap to add"}
+                  {isAr ? "اقتراحات سريعة — اضغط لتعبئة المبلغ وتاريخ الاستحقاق" : "Quick suggestions — tap to set amount & due date"}
                 </span>
                 <div className="flex flex-wrap gap-1.5">
                   {remainingSuggestions.map(s => (
                     <button
                       key={s.titleEn}
                       type="button"
-                      onClick={() => handleAddSuggestedCommitment(s)}
+                      onClick={() => handleSelectSuggestedCommitment(s)}
                       className="px-2.5 py-1.5 rounded-full border border-emerald-800/50 bg-[#061d19]/40 hover:border-emerald-500 hover:bg-[#061d19] text-emerald-400 text-[10px] font-bold flex items-center gap-1 transition-all"
                     >
                       <Plus size={10} />
