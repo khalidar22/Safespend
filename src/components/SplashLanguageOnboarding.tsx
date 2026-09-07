@@ -247,11 +247,37 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
               screen understandable on its own, without needing a separate
               tooltip/modal component. The 2.5% Zakat rate mentioned here
               matches the exact rate the app itself uses in getZakatEstimate()
-              (utils.ts), so this stays consistent with the real calculation. */}
+              (utils.ts), so this stays consistent with the real calculation.
+
+              H21 fix, round 2: the Arabic string originally embedded the raw
+              Latin acronym "BNPL" inside Arabic parentheses — e.g.
+              ("الدفع الآجل" (BNPL — خدمات...)). Mixing an LTR run directly at
+              an RTL parenthesis boundary triggers Unicode bidi paren-mirroring,
+              which visually detaches "(BNPL)" from the explanatory clause that
+              follows it — so a reader sees an isolated, unexplained "(BNPL)"
+              even though the source string does explain it right after. This
+              is exactly why the rest of the app's Arabic UI (see
+              ManagementScreens.tsx:2512) NEVER mixes the Latin acronym into
+              Arabic text — it only ever says "الدفع الآجل". Matching that
+              existing convention (dropping "BNPL" from the Arabic string
+              entirely) fixes both the readability bug and the bidi glitch.
+              The English string is unaffected — it's a pure LTR sentence, so
+              no bidi mirroring issue applies there.
+
+              H21 fix, round 3: dropped the specific provider names (Tabby,
+              Tamara, Klarna) from BOTH languages. The app is explicitly
+              multi-currency/multi-country (see bnplProviders.ts — different
+              providers serve SAR/AED/EGP vs. EUR/GBP/USD), but naming only
+              Gulf-specific brands (Tabby, Tamara) on the very first screen
+              every user sees — regardless of which currency/country they'll
+              pick later — wrongly frames the app as Saudi/Gulf-only. Kept the
+              explanation generic ("installment/BNPL services" instead of
+              specific brand names) so it reads the same for every user
+              regardless of region. */}
           <p className="text-xs text-slate-400 max-w-xs mt-3 leading-relaxed">
             {isAr
-              ? "حارس \"الدفع الآجل\" (BNPL — خدمات التقسيط مثل تابي وتمارا) يحذّرك قبل أي قسط يتجاوز حدك الآمن، مع صندوق \"الزكاة\" الاختياري — الفريضة الشرعية بإخراج نسبة من المدخرات (2.5% سنوياً) — يحسبها لك تلقائياً إذا فعّلته. تطبيق مبني حول حمايتك، لا مجرد جدول مصروفات."
-              : "BNPL (Buy Now, Pay Later — installment services like Tabby, Tamara, and Klarna) Guardian warns you before any installment crosses your safe limit, plus an optional Zakat box — the Islamic obligation to give a portion of savings (2.5% annually) — that automatically calculates it for you if you enable it. Built around protecting you, not just another spending tracker."}
+              ? "حارس \"الدفع الآجل\" (خدمات الدفع بالتقسيط) يحذّرك قبل أي قسط يتجاوز حدك الآمن، مع صندوق \"الزكاة\" الاختياري — الفريضة الشرعية بإخراج نسبة من المدخرات (2.5% سنوياً) — يحسبها لك تلقائياً إذا فعّلته. تطبيق مبني حول حمايتك، لا مجرد جدول مصروفات."
+              : "BNPL (Buy Now, Pay Later) Guardian warns you before any installment crosses your safe limit, plus an optional Zakat box — the Islamic obligation to give a portion of savings (2.5% annually) — that automatically calculates it for you if you enable it. Built around protecting you, not just another spending tracker."}
           </p>
         </div>
 
