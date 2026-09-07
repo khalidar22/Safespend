@@ -647,54 +647,87 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
           {isAr ? "الفواتير والأقساط المستحقة خلال الـ 30 يوماً القادمة:" : "Bills and debt payments due within the next 30 days:"}
         </p>
 
-        <div className="flex flex-col gap-3">
-          {/* H16 fix: the screen's own text promises "bills and installments due
-              within the next 30 days", but the list used to render `commitments`
-              in raw insertion order — never sorted by how soon each one is due.
-              sortCommitmentsByDueProximity() (utils.ts) puts the most urgent/
-              imminent commitment first, matching what the screen's text tells
-              the user. Same helper is used by the Dashboard's preview widget
-              for this exact list, so both places stay consistent. */}
-          {sortCommitmentsByDueProximity<Commitment>(commitments).map((comm) => (
-            <button
-              key={comm.id}
-              type="button"
-              onClick={() => handleTogglePaid(comm.id)}
-              aria-label={isAr
-                ? `${comm.titleAr}، ${comm.paid ? 'مدفوع، اضغط للتراجع' : 'مستحق، اضغط لتأكيد الدفع'}`
-                : `${comm.titleEn}, ${comm.paid ? 'paid, tap to undo' : 'due, tap to mark paid'}`}
-              className={`w-full text-start p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
-                comm.paid
-                  ? 'bg-emerald-950/10 border-emerald-950/40 text-slate-400 opacity-60'
-                  : 'bg-[#051613] border-emerald-900/40 hover:border-emerald-500/30'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                  comm.paid ? 'bg-emerald-500 border-emerald-500 text-[#030d0a]' : 'border-slate-600'
-                }`}>
-                  {comm.paid && <Check size={12} className="stroke-[3]" />}
-                </div>
-                <div>
-                  <h4 className={`text-xs font-bold ${comm.paid ? 'line-through text-slate-400' : 'text-slate-100'}`}>
-                    {isAr ? comm.titleAr : comm.titleEn}
-                  </h4>
-                  <span className="text-[10px] text-slate-400 block">
-                    {isAr ? `تاريخ الاستحقاق: ${comm.dueDate} من الشهر` : `Due date: Day ${comm.dueDate}`}
-                  </span>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-xs font-mono font-bold text-white">
-                  {showBalances ? formatMoney(comm.amount, lang, currency) : '•••'}
-                </div>
-                <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold ${comm.paid ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-500'}`}>
-                  {comm.paid ? (isAr ? "تم الدفع" : "Paid") : (isAr ? "مستحق" : "Due")}
-                </span>
-              </div>
-            </button>
-          ))}
-        </div>
+        {/* M21 fix: an empty commitments list previously rendered this whole
+            section as blank space with no explanation — indistinguishable
+            from a loading/broken screen. Match the empty-state wording
+            pattern already used elsewhere in the app (e.g. the small-
+            subscriptions card) instead of leaving silence. */}
+        {commitments.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-center py-10 px-6">
+            <p className="text-xs text-slate-400 leading-relaxed">
+              {isAr ? "لم تسجّل أي التزامات بعد." : "No commitments recorded yet."}
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {/* H16 fix: the screen's own text promises "bills and installments due
+                within the next 30 days", but the list used to render `commitments`
+                in raw insertion order — never sorted by how soon each one is due.
+                sortCommitmentsByDueProximity() (utils.ts) puts the most urgent/
+                imminent commitment first, matching what the screen's text tells
+                the user. Same helper is used by the Dashboard's preview widget
+                for this exact list, so both places stay consistent. */}
+            {sortCommitmentsByDueProximity<Commitment>(commitments).map((comm) => {
+              // M22 fix: previously every unpaid commitment showed the same
+              // amber "Due" badge regardless of whether its due day already
+              // passed this month (overdue) or is still ahead (due soon) —
+              // the two are very different urgency levels and looked
+              // identical. dueDate only stores a day-of-month, so "overdue"
+              // here means that day-of-month has already passed within the
+              // current calendar month and the bill is still unpaid.
+              const todayDayNum = new Date().getDate();
+              const rawDueDay = parseInt(comm.dueDate, 10) || 1;
+              const isOverdue = !comm.paid && rawDueDay < todayDayNum;
+              return (
+                <button
+                  key={comm.id}
+                  type="button"
+                  onClick={() => handleTogglePaid(comm.id)}
+                  aria-label={isAr
+                    ? `${comm.titleAr}، ${comm.paid ? 'مدفوع، اضغط للتراجع' : isOverdue ? 'متأخر، اضغط لتأكيد الدفع' : 'مستحق، اضغط لتأكيد الدفع'}`
+                    : `${comm.titleEn}, ${comm.paid ? 'paid, tap to undo' : isOverdue ? 'overdue, tap to mark paid' : 'due, tap to mark paid'}`}
+                  className={`w-full text-start p-4 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${
+                    comm.paid
+                      ? 'bg-emerald-950/10 border-emerald-950/40 text-slate-400 opacity-60'
+                      : isOverdue
+                      ? 'bg-[#1a0808] border-rose-900/50 hover:border-rose-500/40'
+                      : 'bg-[#051613] border-emerald-900/40 hover:border-emerald-500/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
+                      comm.paid ? 'bg-emerald-500 border-emerald-500 text-[#030d0a]' : isOverdue ? 'border-rose-500' : 'border-slate-600'
+                    }`}>
+                      {comm.paid && <Check size={12} className="stroke-[3]" />}
+                    </div>
+                    <div>
+                      <h4 className={`text-xs font-bold ${comm.paid ? 'line-through text-slate-400' : 'text-slate-100'}`}>
+                        {isAr ? comm.titleAr : comm.titleEn}
+                      </h4>
+                      <span className="text-[10px] text-slate-400 block">
+                        {isAr ? `تاريخ الاستحقاق: ${comm.dueDate} من الشهر` : `Due date: Day ${comm.dueDate}`}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-mono font-bold text-white">
+                      {showBalances ? formatMoney(comm.amount, lang, currency) : '•••'}
+                    </div>
+                    <span className={`text-[8px] px-1.5 py-0.5 rounded font-bold ${
+                      comm.paid
+                        ? 'bg-emerald-500/10 text-emerald-400'
+                        : isOverdue
+                        ? 'bg-rose-500/10 text-rose-400'
+                        : 'bg-amber-500/10 text-amber-500'
+                    }`}>
+                      {comm.paid ? (isAr ? "تم الدفع" : "Paid") : isOverdue ? (isAr ? "متأخر" : "Overdue") : (isAr ? "مستحق" : "Due")}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
         <div className="h-24 shrink-0" />
       </div>
     );

@@ -78,6 +78,14 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
   const [customTitleAr, setCustomTitleAr] = useState('');
   const [customAmount, setCustomAmount] = useState<number>(100);
   const [customDay, setCustomDay] = useState('25');
+  // M18 fix: the Amount field's `required` attribute only stops an EMPTY
+  // submission — it does nothing for 0 or a negative number, and the form's
+  // onSubmit calls e.preventDefault() before any further native checks run.
+  // This tracks an explicit validation error so 0/negative amounts are
+  // rejected with a visible message instead of silently creating a
+  // commitment that would then subtract a non-positive amount from every
+  // "available today" calculation.
+  const [customAmountError, setCustomAmountError] = useState('');
 
   const handleToggleCommitment = (id: string) => {
     const target = commitments.find(c => c.id === id);
@@ -109,7 +117,17 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
   const handleAddCustomCommitment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customTitleEn && !customTitleAr) return;
-    
+
+    // M18 fix: reject 0, negative, or non-finite amounts before adding the
+    // commitment — the "required" attribute alone lets these through.
+    if (!Number.isFinite(customAmount) || customAmount <= 0) {
+      setCustomAmountError(isAr
+        ? "يجب أن يكون المبلغ رقماً أكبر من صفر."
+        : "The amount must be a number greater than zero.");
+      return;
+    }
+    setCustomAmountError('');
+
     const newComm: Commitment = {
       id: `custom-comm-${Date.now()}`,
       titleEn: customTitleEn || customTitleAr,
@@ -124,6 +142,7 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
     setCustomTitleEn('');
     setCustomTitleAr('');
     setCustomAmount(100);
+    setCustomAmountError('');
     setShowAddCustom(false);
   };
 
@@ -140,6 +159,7 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
   const handleSelectSuggestedCommitment = (s: { titleEn: string; titleAr: string; category: string }) => {
     setCustomTitleEn(s.titleEn);
     setCustomTitleAr(s.titleAr);
+    setCustomAmountError('');
     setShowAddCustom(true);
   };
 
@@ -308,13 +328,22 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                 </div>
 
                 {/* شبكة الأيام 1–31 */}
+                {/* M19 fix: each cell was only ~26px tall (py-1.5 + text), well
+                    under the ~44px minimum touch target (WCAG 2.5.5 / iOS HIG).
+                    min-h-[44px] keeps every day tappable without misfires,
+                    matching the min-w-[44px]/min-h-[44px] convention already
+                    used for icon buttons elsewhere in this project. aria-label/
+                    aria-pressed make the grid usable by screen readers, which
+                    previously only had the bare day number. */}
                 <div className="grid grid-cols-7 gap-1">
                   {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                     <button
                       key={day}
                       type="button"
                       onClick={() => setSalaryDay(day)}
-                      className={`py-1.5 rounded-lg text-[11px] font-mono font-bold transition-all ${
+                      aria-label={isAr ? `يوم ${day} من كل شهر` : `Day ${day} of each month`}
+                      aria-pressed={salaryDay === day}
+                      className={`min-h-[44px] rounded-lg text-[11px] font-mono font-bold transition-all flex items-center justify-center ${
                         salaryDay === day
                           ? 'bg-emerald-500 text-[#030d0a]'
                           : 'bg-[#020d0a] text-slate-400 hover:text-white hover:bg-emerald-950/40'
@@ -486,7 +515,7 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
           {/* Add custom commitment trigger */}
           {!showAddCustom ? (
             <button
-              onClick={() => setShowAddCustom(true)}
+              onClick={() => { setCustomAmountError(''); setShowAddCustom(true); }}
               className="mt-3 py-2 w-full border border-dashed border-emerald-800/50 hover:border-emerald-500 hover:bg-[#061d19]/20 transition-all text-emerald-400 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1"
             >
               <Plus size={12} />
@@ -522,14 +551,19 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                   <span className="text-[9px] text-emerald-500/80 font-bold px-1">
                     {isAr ? "المبلغ" : "Amount"}
                   </span>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     value={customAmount}
                     onChange={e => setCustomAmount(Number(e.target.value))}
-                    placeholder="المبلغ" 
+                    placeholder="المبلغ"
+                    min="0.01"
+                    step="0.01"
                     className="bg-[#030d0a] border border-emerald-950 px-2 py-1.5 rounded text-[10px] text-white font-mono"
                     required
                   />
+                  {customAmountError && (
+                    <p className="text-[9px] text-rose-400 font-bold">{customAmountError}</p>
+                  )}
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[9px] text-emerald-500/80 font-bold px-1">
@@ -545,9 +579,9 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                 </div>
               </div>
               <div className="flex gap-2 mt-1">
-                <button 
-                  type="button" 
-                  onClick={() => setShowAddCustom(false)}
+                <button
+                  type="button"
+                  onClick={() => { setCustomAmountError(''); setShowAddCustom(false); }}
                   className="px-2 py-1 bg-rose-950/30 text-rose-400 text-[9px] font-bold rounded hover:bg-rose-900/20"
                 >
                   {isAr ? "إلغاء" : "Cancel"}
