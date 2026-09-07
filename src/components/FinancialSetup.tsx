@@ -276,9 +276,15 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                     // explanation to the user. Reject any non-finite parse outright
                     // (keep the previous valid value) and cap to a generous but sane
                     // upper bound so a typo/overflow can't produce an unusable number.
+                    // Cap lowered from 1 billion to 10 million after live testing showed
+                    // "1,000,000,000" appearing in the field — jarring for a real user,
+                    // and no realistic individual monthly income (across any supported
+                    // currency, including EGP's larger nominal scale) comes anywhere
+                    // close to 10 million anyway. This is a defensive ceiling against
+                    // garbage/overflow input, not a real business rule.
                     const n = Number(e.target.value);
                     if (!Number.isFinite(n)) return;
-                    setUserSalary(Math.min(1_000_000_000, Math.max(0, n)));
+                    setUserSalary(Math.min(10_000_000, Math.max(0, n)));
                   }}
                   className="w-full px-4 py-2.5 bg-[#051411] border border-emerald-950 rounded-xl text-xs text-white font-mono font-bold focus:outline-none focus:border-emerald-500"
                   placeholder="15000"
