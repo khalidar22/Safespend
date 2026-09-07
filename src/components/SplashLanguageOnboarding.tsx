@@ -136,28 +136,36 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
           <h3 className="text-sm text-slate-400 mb-8">Choose your preferred language</h3>
 
           <div className="flex flex-col gap-4 w-full max-w-xs">
-            {/* English option — now first and default */}
+            {/* M45 fix: this "Default" badge + highlighted border were on
+                English, but App.tsx actually initializes lang to 'ar' for
+                every fresh install with no saved state
+                (useState<AppLanguage>(savedState?.lang || 'ar')) -- Arabic
+                IS the app's real default, so labeling English as "Default"
+                directly contradicted the app's own behavior. Moved the
+                badge/highlight to Arabic to match reality; English is
+                still listed first since it's a fully supported equal
+                option, just no longer mislabeled. */}
             <button
               onClick={() => {
                 setLang('en');
                 onNavigate('currency_setup');
               }}
-              className="w-full p-4 rounded-2xl bg-[#061d19] border-2 border-emerald-500 text-white font-bold text-base hover:bg-emerald-950/40 transition-all flex justify-between items-center"
+              className="w-full p-4 rounded-2xl bg-[#061d19] border border-emerald-950 text-slate-300 font-bold text-base hover:bg-emerald-950/40 transition-all flex justify-between items-center"
             >
               <span className="text-base">English</span>
-              <span className="text-xs bg-emerald-500/20 px-2 py-0.5 rounded-full text-emerald-400">Default</span>
+              <span className="text-xs text-slate-400">EN</span>
             </button>
 
-            {/* Arabic option — now second */}
+            {/* Arabic option — the app's actual default language */}
             <button
               onClick={() => {
                 setLang('ar');
                 onNavigate('currency_setup');
               }}
-              className="w-full p-4 rounded-2xl bg-[#061d19] border border-emerald-950 text-slate-300 font-bold text-base hover:bg-emerald-950/40 transition-all flex justify-between items-center"
+              className="w-full p-4 rounded-2xl bg-[#061d19] border-2 border-emerald-500 text-white font-bold text-base hover:bg-emerald-950/40 transition-all flex justify-between items-center"
             >
               <span className="text-base">العربية</span>
-              <span className="text-xs text-slate-400">AR</span>
+              <span className="text-xs bg-emerald-500/20 px-2 py-0.5 rounded-full text-emerald-400">افتراضي</span>
             </button>
           </div>
         </div>
@@ -176,7 +184,10 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 px-5 pt-5 pb-8 gap-3" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex flex-col items-center text-center shrink-0">
           <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 border border-emerald-500/20 mb-2">
-            <span className="text-xl font-bold">{getCurrency(currency).symbolAr || '#'}</span>
+            {/* M44 fix: this badge always showed symbolAr regardless of the
+                selected UI language, so an English-language user still saw
+                the Arabic currency symbol (e.g. "ريال" for SAR) here. */}
+            <span className="text-xl font-bold">{(isAr ? getCurrency(currency).symbolAr : getCurrency(currency).symbolEn) || '#'}</span>
           </div>
           <h2 className="text-lg font-bold text-white mb-0.5">{isAr ? "اختر عملتك" : "Choose your currency"}</h2>
           <h3 className="text-xs text-slate-400">{isAr ? "يمكنك تغييرها لاحقاً من الإعدادات" : "You can change this later from Settings"}</h3>

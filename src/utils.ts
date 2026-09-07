@@ -469,7 +469,15 @@ export interface ZakatEstimate {
 /** Equal split of a bill's total across N people, including the payer. Rounds to cents. */
 export function computeEqualSplit(total: number, peopleCountIncludingPayer: number): number {
   if (peopleCountIncludingPayer <= 0) return 0;
-  return Math.round((total / peopleCountIncludingPayer) * 100) / 100;
+  // M41 fix: the "Split Equally" button in the UI calls this directly, and
+  // was able to bypass the bill-total form field's HTML `min` validation
+  // entirely (a negative total was never re-checked here), producing a
+  // negative per-person "amount owed" -- a share of a bill can never
+  // legitimately be negative. Clamp the total to zero as a floor so a bad
+  // input produces a harmless 0 split instead of propagating a negative
+  // amount into BillSplit records and reminder messages.
+  const safeTotal = Math.max(0, total);
+  return Math.round((safeTotal / peopleCountIncludingPayer) * 100) / 100;
 }
 
 /** Sum still owed to the user across ALL splits (every unsettled participant, every split). */

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   ArrowLeft, 
@@ -188,7 +188,33 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
   // persists across screen navigation since this component stays mounted) —
   // the form would then submit whatever category now happens to sit at that
   // position without any indication to the user. An id is immune to that.
-  const [expenseCategoryId, setExpenseCategoryId] = useState<string>(() => savingBoxes[1]?.id || savingBoxes[0]?.id || ''); // default to Restaurants
+  // M30 fix: the default used to be picked by raw array position
+  // (savingBoxes[1]), assuming "Restaurants" always sits at index 1 --
+  // true only for the untouched mock data. If the user reorders/deletes
+  // categories before ever opening this screen, index 1 silently becomes
+  // some other category with no indication anything changed. Look it up
+  // by its stable title instead, so the default only ever means
+  // "Restaurants" (or the first box, if Restaurants doesn't exist).
+  const [expenseCategoryId, setExpenseCategoryId] = useState<string>(() =>
+    savingBoxes.find(b => b.titleEn === 'Restaurants')?.id || savingBoxes[0]?.id || ''
+  );
+
+  // M30 fix, part 2: this lazy initializer only ever runs on the FIRST
+  // render, so if savingBoxes was still empty at that moment (or the
+  // previously-selected category was deleted later), expenseCategoryId
+  // is left as '' or pointing at an id that no longer exists -- the
+  // category picker below then shows NOTHING highlighted even though
+  // handleSaveExpense silently falls back to savingBoxes[0] regardless,
+  // which looks broken/inconsistent to the user. Re-sync whenever the
+  // current selection is no longer valid but boxes ARE available.
+  useEffect(() => {
+    if (savingBoxes.length === 0) return;
+    const stillValid = savingBoxes.some(b => b.id === expenseCategoryId);
+    if (!stillValid) {
+      setExpenseCategoryId(savingBoxes.find(b => b.titleEn === 'Restaurants')?.id || savingBoxes[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savingBoxes]);
   const [expenseNote, setExpenseNote] = useState<string>('');
   const [expenseDate, setExpenseDate] = useState<string>(() => {
     const d = new Date();

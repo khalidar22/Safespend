@@ -212,6 +212,15 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     e.preventDefault();
     if (!instTitle.trim() || !instTotal || !instPayments || instPayments < 1 || !Number.isInteger(Number(instPayments))) return;
     const total = Number(instTotal);
+    // M39 fix: `!instTotal` only rejects 0/empty/NaN -- a negative value like
+    // -500 is truthy in JS and sailed straight through this check (the form
+    // field's HTML `min` attribute is not a real guard: handleSaveInstallment
+    // calls e.preventDefault() unconditionally, same root cause as the
+    // earlier C3-family installment bugs). A negative installment total
+    // would then produce a negative monthlyPayment and corrupt every
+    // downstream sum. Also reject non-finite (Infinity) for the same reason
+    // the expense-amount fields do.
+    if (!Number.isFinite(total) || total <= 0) return;
     const monthlyPayment = Math.round((total / Number(instPayments)) * 100) / 100;
 
     if (editingInstallmentId) {
@@ -271,11 +280,14 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   const [splitRows, setSplitRows] = useState<{ id: string; name: string; amount: number | '' }[]>([]);
   const [splitToDelete, setSplitToDelete] = useState<BillSplit | null>(null);
   const [copiedParticipantId, setCopiedParticipantId] = useState<string | null>(null);
+  // M43 fix: see handleSaveSplit below.
+  const [splitAmountError, setSplitAmountError] = useState('');
 
   const handleStartAddSplit = () => {
     setSplitTitle('');
     setSplitTotal('');
     setSplitRows([{ id: `row-${Date.now()}`, name: '', amount: '' }]);
+    setSplitAmountError('');
     setShowSplitForm(true);
   };
 
@@ -298,6 +310,23 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     e.preventDefault();
     const validRows = splitRows.filter(r => r.name.trim() && r.amount !== '' && Number(r.amount) > 0);
     if (!splitTitle.trim() || !splitTotal || validRows.length === 0) return;
+
+    // M43 fix: manually-typed participant amounts were never checked against
+    // the bill total at all -- a user could enter shares that together add
+    // up to far more than what they actually paid (e.g. a 100 SAR dinner
+    // with 5 people manually given 100 each = 500 owed on a 100 bill). The
+    // "Split Equally" button always produces a correct sum, but manual entry
+    // had no such guard. A small cent-level tolerance absorbs the same
+    // rounding-to-cent behavior computeEqualSplit itself uses, so a
+    // legitimate equal split is never wrongly rejected.
+    const sharesSum = validRows.reduce((sum, r) => sum + Number(r.amount), 0);
+    if (sharesSum > Number(splitTotal) + 0.01) {
+      setSplitAmountError(isAr
+        ? `مجموع الحصص (${sharesSum.toFixed(2)}) أكبر من إجمالي الفاتورة (${Number(splitTotal).toFixed(2)}). صحّح المبالغ قبل الحفظ.`
+        : `The shares add up to ${sharesSum.toFixed(2)}, more than the bill total (${Number(splitTotal).toFixed(2)}). Fix the amounts before saving.`);
+      return;
+    }
+    setSplitAmountError('');
 
     const participants: SplitParticipant[] = validRows.map((r, idx) => ({
       id: `part-${Date.now()}-${idx}`,
@@ -895,7 +924,16 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
 
         <div className="flex flex-col gap-3">
           {installments.map((inst) => {
-            const paidPct = Math.round((inst.paidAmount / inst.total) * 100);
+            // M42 fix: inst.total could be 0 for an installment plan created
+            // before M39's total>0 validation existed (or from an imported
+            // backup file), making this a division by zero -- NaN (0/0) or
+            // Infinity (positive/0), either of which produces an invalid
+            // CSS width below ("NaN%"/"Infinity%"). Guard the division and
+            // clamp to [0,100] in case paidAmount ever exceeds total from
+            // older/imported data.
+            const paidPct = inst.total > 0
+              ? Math.min(100, Math.max(0, Math.round((inst.paidAmount / inst.total) * 100)))
+              : 0;
             const isCompleted = inst.remainingPayments <= 0;
             return (
               <div key={inst.id} className={`bg-[#051613] border rounded-2xl p-4 flex flex-col shadow-sm ${isCompleted ? 'border-emerald-500/30 opacity-70' : 'border-emerald-950'}`}>
@@ -2032,11 +2070,16 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
               <span>{isAr ? "أضف شخصاً آخر" : "Add another person"}</span>
             </button>
 
+            {/* M43 fix: surfaces the shares-exceed-total error from handleSaveSplit. */}
+            {splitAmountError && (
+              <p className="text-[10px] text-rose-400 px-1 leading-relaxed">{splitAmountError}</p>
+            )}
+
             <div className="grid grid-cols-2 gap-1.5 mt-1">
               <button type="submit" className="py-2 bg-emerald-500 text-slate-950 text-xs font-bold rounded-xl">
                 {isAr ? "حفظ القسمة" : "Save Split"}
               </button>
-              <button type="button" onClick={() => setShowSplitForm(false)} className="py-2 bg-[#020d0a] border border-emerald-950 text-slate-400 text-xs font-bold rounded-xl">
+              <button type="button" onClick={() => { setShowSplitForm(false); setSplitAmountError(''); }} className="py-2 bg-[#020d0a] border border-emerald-950 text-slate-400 text-xs font-bold rounded-xl">
                 {isAr ? "إلغاء" : "Cancel"}
               </button>
             </div>
