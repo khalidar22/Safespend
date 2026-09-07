@@ -572,6 +572,21 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   const handleAddGoal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!goalTitleEn && !goalTitleAr) return;
+    // M10 fix: goalTarget only had HTML `min` validation on the number input,
+    // which — like the installment-total field this app already fixed for
+    // the same reason — a submit handler calling e.preventDefault() bypasses
+    // entirely. A zero/negative target would create a goal that's already
+    // "achieved" (or impossible to ever fill), and downstream percentage
+    // math (current/target) would divide by zero or produce a nonsensical
+    // negative-target ratio. Reject it explicitly here, reusing the same
+    // inline error slot already used for the target-below-current-savings
+    // guard right below.
+    if (!Number.isFinite(goalTarget) || goalTarget <= 0) {
+      setGoalTargetError(isAr
+        ? "يجب أن يكون المستهدف رقماً أكبر من صفر."
+        : "The target must be a number greater than zero.");
+      return;
+    }
     if (editingGoalId) {
       // Guard: never let an edit lower the target below the amount already saved.
       // A goal's `current` balance must never be silently truncated — see the
@@ -588,6 +603,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
         ? { ...item, titleAr: goalTitleAr || goalTitleEn, titleEn: goalTitleEn || goalTitleAr, target: goalTarget }
         : item));
     } else {
+      setGoalTargetError(null);
       const newGoal: FinancialGoal = {
         id: `goal-${Date.now()}`,
         titleEn: goalTitleEn || goalTitleAr,

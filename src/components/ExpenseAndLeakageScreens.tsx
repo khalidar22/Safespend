@@ -210,6 +210,10 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
   const [newBoxTitleEn, setNewBoxTitleEn] = useState<string>('');
   const [newBoxLimit, setNewBoxLimit] = useState<string>('');
   const [newBoxIcon, setNewBoxIcon] = useState<string>('shopping-bag');
+  // M8 fix: shown when the name being saved (create or rename) duplicates an
+  // existing category — see the save handler below for why duplicate names
+  // are a real financial-data bug, not just a cosmetic annoyance.
+  const [newBoxNameError, setNewBoxNameError] = useState<string>('');
   const [editingBoxId, setEditingBoxId] = useState<string | null>(null);
   const [boxToDelete, setBoxToDelete] = useState<SavingBox | null>(null);
 
@@ -407,6 +411,7 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
                   setNewBoxLimit(box.limit > 0 ? String(box.limit) : '');
                   setNewBoxIcon(box.icon);
                   setIconSearch('');
+                  setNewBoxNameError('');
                   setShowAddBoxPopup(true);
                 }}
                 className="bg-[#051613] border border-emerald-950/60 rounded-2xl p-4 flex flex-col shadow-sm transition-all cursor-pointer"
@@ -448,6 +453,7 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
                         setNewBoxLimit(box.limit > 0 ? String(box.limit) : '');
                         setNewBoxIcon(box.icon);
                         setIconSearch('');
+                        setNewBoxNameError('');
                         setShowAddBoxPopup(true);
                       }}
                       className="p-1 rounded-lg text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"
@@ -511,6 +517,7 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
             setNewBoxLimit('');
             setNewBoxIcon('🛒');
             setIconSearch('');
+            setNewBoxNameError('');
             setShowAddBoxPopup(true);
           }}
           className="mt-4 py-3.5 w-full bg-emerald-500 hover:bg-emerald-400 text-[#030d0a] text-xs font-bold rounded-2xl shadow-md transition-all flex items-center justify-center gap-1.5"
@@ -555,6 +562,14 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
                     placeholder={isAr ? "مثال: Entertainment" : "مثال: الترفيه والتسوق"}
                     className="w-full px-3 py-2 bg-[#020d0a] border border-emerald-950 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
                   />
+                  {/* M8 fix: a duplicate category name isn't just a display nuisance —
+                      elsewhere (leak detection, delete-balance-reversal) any transaction
+                      missing a boxId falls back to matching by name, and a duplicate name
+                      makes that fallback double-count or double-reverse across BOTH boxes.
+                      Block it here at the source, with a clear reason. */}
+                  {newBoxNameError && (
+                    <p className="text-[10px] text-rose-400 font-bold mt-1">{newBoxNameError}</p>
+                  )}
                 </div>
 
                 <div>
@@ -647,12 +662,31 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
                   onClick={() => {
                     const limitNum = parseFloat(newBoxLimit);
                     if ((!newBoxTitleAr && !newBoxTitleEn) || isNaN(limitNum) || limitNum <= 0) return;
-                    
+
                     const colors = ['#10b981', '#f59e0b', '#3b82f6', '#f43f5e', '#8b5cf6', '#ec4899', '#6366f1'];
                     const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
                     const finalTitleAr = newBoxTitleAr || newBoxTitleEn;
                     const finalTitleEn = newBoxTitleEn || newBoxTitleAr;
+
+                    // M8 fix: reject a name (Arabic OR English) that already belongs to
+                    // a DIFFERENT category. Transactions without a boxId (old data, or
+                    // imported data) fall back to matching saving boxes by exact name in
+                    // several places (leak-detection totals, balance reversal on delete)
+                    // — two boxes sharing a name makes those fallbacks silently double-
+                    // count or double-reverse the same transaction across both boxes.
+                    const norm = (s: string) => s.trim().toLowerCase();
+                    const isDuplicate = savingBoxes.some(b =>
+                      b.id !== editingBoxId &&
+                      (norm(b.titleAr) === norm(finalTitleAr) || norm(b.titleEn) === norm(finalTitleEn))
+                    );
+                    if (isDuplicate) {
+                      setNewBoxNameError(isAr
+                        ? "يوجد بالفعل فئة بهذا الاسم — اختر اسماً مختلفاً."
+                        : "A category with this name already exists — choose a different name.");
+                      return;
+                    }
+                    setNewBoxNameError('');
 
                     if (editingBoxId) {
                       // وضع التعديل: نحدّث الاسم والحد والأيقونة فقط
@@ -682,6 +716,7 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
                     setNewBoxLimit('');
                     setNewBoxIcon('🛒');
                     setIconSearch('');
+                    setNewBoxNameError('');
                     setShowAddBoxPopup(false);
                   }}
                   className="py-2 px-3 bg-emerald-500 hover:bg-emerald-400 text-[#030d0a] font-bold rounded-xl text-center cursor-pointer text-xs"
@@ -694,6 +729,7 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
                   type="button"
                   onClick={() => {
                     setEditingBoxId(null);
+                    setNewBoxNameError('');
                     setShowAddBoxPopup(false);
                   }}
                   className="py-2 px-3 bg-[#020d0a] border border-emerald-950 text-slate-400 font-bold rounded-xl text-center cursor-pointer text-xs"
@@ -1269,8 +1305,18 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
 
     // Active commitments only (respects the 'active' field, previously ignored)
     const activeSubs = (commitments || []).filter(c => c.active !== false);
-    // "Small" = below the user-configurable percentage of salary
-    const microThresholdAmount = Math.round((userSalary * microThresholdPct) / 100);
+    // "Small" = below the user-configurable percentage of salary.
+    // M9 fix: this used to Math.round() the threshold, which silently
+    // collapses to exactly 0 for any low-but-valid salary (e.g. salary=10,
+    // threshold%=1 -> 0.1 -> rounds to 0). Once the threshold is 0, the
+    // strict `<` comparison below can never match anything, so the whole
+    // "small recurring commitments" feature silently disables itself and
+    // reads as an innocent empty state ("you have no small subscriptions")
+    // instead of what's actually happening. Keep the threshold unrounded for
+    // the comparison — formatMoney already rounds it sensibly wherever it's
+    // displayed to the user, so nothing about the UI text changes for the
+    // normal case; only this edge case starts working correctly.
+    const microThresholdAmount = (userSalary * microThresholdPct) / 100;
     const microSubs = activeSubs.filter(c => c.amount < microThresholdAmount);
     const totalSubsAmount = microSubs.reduce((sum, c) => sum + c.amount, 0);
     const totalSubsAnnual = totalSubsAmount * 12;
