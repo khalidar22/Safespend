@@ -705,7 +705,11 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                         {isAr ? comm.titleAr : comm.titleEn}
                       </h4>
                       <span className="text-[10px] text-slate-400 block">
-                        {isAr ? `تاريخ الاستحقاق: ${comm.dueDate} من الشهر` : `Due date: Day ${comm.dueDate}`}
+                        {/* M36 fix: dueDate is a zero-padded string (e.g.
+                            "05"), so this used to show a raw leading zero
+                            like "Due date: Day 05". parseInt strips it for
+                            display only. */}
+                        {isAr ? `تاريخ الاستحقاق: ${parseInt(comm.dueDate, 10)} من الشهر` : `Due date: Day ${parseInt(comm.dueDate, 10)}`}
                       </span>
                     </div>
                   </div>
@@ -1436,14 +1440,41 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
       .sort((a, b) => {
         const aPct = a.limit > 0 ? a.amount / a.limit : -1;
         const bPct = b.limit > 0 ? b.amount / b.limit : -1;
-        return bPct - aPct;
+        // M37 fix: categories with no limit set both got aPct/bPct = -1, so
+        // any two no-limit categories (or any genuine percentage tie) were
+        // left in whatever order Object.values() happened to produce --
+        // not wrong exactly, but not meaningful either, and it could look
+        // like the list order was arbitrary/unstable to the user. Break
+        // ties by actual amount spent (descending) so the ordering always
+        // reflects something real.
+        if (bPct !== aPct) return bPct - aPct;
+        return b.amount - a.amount;
       });
 
+    // M12 fix: weeks 1-3 are always a fixed 7 days each (days 1-7, 8-14,
+    // 15-21), but week 4 absorbs whatever is LEFT in the cycle -- and salary
+    // cycles run roughly 28-31 days (see getCycleBounds), so week 4 is
+    // usually 8-10 days long (sometimes as few as 6-7). Comparing raw sums
+    // directly is unfair: a week with more days will tend to accumulate a
+    // bigger total even at the exact same daily spending rate, so "peak
+    // week" was structurally biased toward whichever week happens to be
+    // longest -- almost always week 4 -- regardless of actual spending
+    // behavior. Comparing average spend PER DAY within each week removes
+    // that length bias; the displayed total for the winning week is still
+    // its real total, just no longer used to pick the winner.
+    const cycleLengthDays = Math.max(1, Math.round((rep_cycleEnd.getTime() - rep_cycleStart.getTime()) / 86400000));
+    const week4Days = Math.max(1, cycleLengthDays - 21);
+    const w1Avg = w1Sum / 7;
+    const w2Avg = w2Sum / 7;
+    const w3Avg = w3Sum / 7;
+    const w4Avg = w4Sum / week4Days;
+
     let maxWeekNum = 1;
+    let maxWeekAvg = w1Avg;
     let maxWeekVal = w1Sum;
-    if (w2Sum > maxWeekVal) { maxWeekNum = 2; maxWeekVal = w2Sum; }
-    if (w3Sum > maxWeekVal) { maxWeekNum = 3; maxWeekVal = w3Sum; }
-    if (w4Sum > maxWeekVal) { maxWeekNum = 4; maxWeekVal = w4Sum; }
+    if (w2Avg > maxWeekAvg) { maxWeekNum = 2; maxWeekAvg = w2Avg; maxWeekVal = w2Sum; }
+    if (w3Avg > maxWeekAvg) { maxWeekNum = 3; maxWeekAvg = w3Avg; maxWeekVal = w3Sum; }
+    if (w4Avg > maxWeekAvg) { maxWeekNum = 4; maxWeekAvg = w4Avg; maxWeekVal = w4Sum; }
 
     const peakDescAr = maxWeekVal > 0 
       ? `الإنفاق الأكبر تركز في الأسبوع ${maxWeekNum === 1 ? 'الأول' : maxWeekNum === 2 ? 'الثاني' : maxWeekNum === 3 ? 'الثالث' : 'الرابع'} بمجموع ${showBalances ? formatMoney(maxWeekVal, lang, currency) : '•••'}.`

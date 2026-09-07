@@ -493,7 +493,11 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                       {isAr ? comm.titleAr : comm.titleEn}
                     </div>
                     <div className="text-[9px] text-slate-400">
-                      {isAr ? `يستحق في يوم ${comm.dueDate}` : `Due on Day ${comm.dueDate}`}
+                      {/* M36 fix: dueDate is a zero-padded string (e.g.
+                          "05"), so this used to show a raw leading zero
+                          like "Due on Day 05". parseInt strips it for
+                          display only. */}
+                      {isAr ? `يستحق في يوم ${parseInt(comm.dueDate, 10)}` : `Due on Day ${parseInt(comm.dueDate, 10)}`}
                     </div>
                   </div>
                 </div>
@@ -511,11 +515,18 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                     />
                   </div>
 
+                  {/* M38 fix: this delete button relied only on the `title`
+                      attribute (a hover tooltip, not reliably announced by
+                      mobile screen readers) with no aria-label, and was
+                      sized ~30x30px (p-1.5), below the 44px accessible
+                      touch-target minimum used elsewhere in the app. */}
                   <button
+                    type="button"
                     onClick={() => {
                       setCommitments(prev => prev.filter(c => c.id !== comm.id));
                     }}
-                    className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition-colors"
+                    aria-label={isAr ? `حذف التزام: ${comm.titleAr}` : `Delete commitment: ${comm.titleEn}`}
+                    className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition-colors"
                     title={isAr ? "حذف" : "Delete"}
                   >
                     <Trash2 size={13} />

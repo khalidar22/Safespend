@@ -222,10 +222,17 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
         className="flex flex-col h-full bg-[#030d0a] text-slate-100 justify-between p-8"
         dir={isAr ? 'rtl' : 'ltr'}
       >
-        {/* M20 fix: added a Back button to the top row (previously just
-            "1 of 3" + Skip, with no way back to the currency screen).
-            justify-between with three children spreads Back to the start,
-            the slide counter in the middle, and Skip to the end. */}
+        {/* M20 fix: added a Back button to the top row, with no way back to
+            the currency screen previously.
+
+            M20 follow-up fix (found during live testing): this row also
+            showed a "1 of 3" slide counter, but the code only ever
+            implements this ONE value-prop screen — both "Skip" and the
+            bottom "Next" button navigate straight to 'persona', there is
+            no slide 2 or slide 3 anywhere in the codebase. "1 of 3" was
+            therefore actively misleading (it promises two more screens
+            that never appear), so it's removed here rather than kept as
+            a permanently-stuck counter. */}
         <div className="flex justify-between items-center text-xs">
           <button
             onClick={() => onNavigate('currency_setup')}
@@ -234,7 +241,6 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
           >
             {isAr ? <ArrowRight size={16} /> : <ArrowLeft size={16} />}
           </button>
-          <span className="text-slate-400">1 of 3</span>
           <button
             onClick={() => onNavigate('persona')}
             className="text-emerald-500 font-bold hover:underline"

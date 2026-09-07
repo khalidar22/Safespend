@@ -394,10 +394,16 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto overflow-x-hidden pb-24 animate-fade-in" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-6">
-          <button 
+          <button
+            type="button"
             onClick={() => onNavigate('dashboard')}
-            className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30"
+            aria-label={isAr ? "رجوع" : "Back"}
+            className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
+            {/* M33 fix: this back button (identical across 5 screens in this
+                file) had no aria-label and only ~30px of padding, below the
+                44px accessible touch-target minimum used elsewhere in the
+                app (e.g. the Reports screen's own back button). */}
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-white">
@@ -824,10 +830,16 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto overflow-x-hidden pb-24" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-6">
-          <button 
+          <button
+            type="button"
             onClick={() => onNavigate('dashboard')}
-            className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30"
+            aria-label={isAr ? "رجوع" : "Back"}
+            className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
+            {/* M33 fix: this back button (identical across 5 screens in this
+                file) had no aria-label and only ~30px of padding, below the
+                44px accessible touch-target minimum used elsewhere in the
+                app (e.g. the Reports screen's own back button). */}
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-white">
@@ -1041,10 +1053,16 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
     return (
       <div className="flex flex-col h-full w-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto overflow-x-hidden pb-28" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-6">
-          <button 
+          <button
+            type="button"
             onClick={() => onNavigate('dashboard')}
-            className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30"
+            aria-label={isAr ? "رجوع" : "Back"}
+            className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
+            {/* M33 fix: this back button (identical across 5 screens in this
+                file) had no aria-label and only ~30px of padding, below the
+                44px accessible touch-target minimum used elsewhere in the
+                app (e.g. the Reports screen's own back button). */}
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-white">
@@ -1230,10 +1248,16 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto overflow-x-hidden pb-24" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-6">
-          <button 
+          <button
+            type="button"
             onClick={() => onNavigate('dashboard')}
-            className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30"
+            aria-label={isAr ? "رجوع" : "Back"}
+            className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
+            {/* M33 fix: this back button (identical across 5 screens in this
+                file) had no aria-label and only ~30px of padding, below the
+                44px accessible touch-target minimum used elsewhere in the
+                app (e.g. the Reports screen's own back button). */}
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-white">
@@ -1354,10 +1378,16 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto overflow-x-hidden pb-24" dir={isAr ? 'rtl' : 'ltr'}>
         <div className="flex items-center gap-3 mb-6">
-          <button 
+          <button
+            type="button"
             onClick={() => onNavigate('dashboard')}
-            className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30"
+            aria-label={isAr ? "رجوع" : "Back"}
+            className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
+            {/* M33 fix: this back button (identical across 5 screens in this
+                file) had no aria-label and only ~30px of padding, below the
+                44px accessible touch-target minimum used elsewhere in the
+                app (e.g. the Reports screen's own back button). */}
             {isAr ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
           </button>
           <h2 className="text-base font-bold text-white">

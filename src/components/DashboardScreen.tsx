@@ -388,7 +388,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   {showBalances ? formatMoney(remainingSalary, lang, currency) : '••••'}
                 </div>
                 <div className="text-[9px] text-emerald-400/70 font-medium mt-0.5">
-                  {isAr ? `على ${daysToSalary} يوم` : `over ${daysToSalary} days`}
+                  {/* M35 fix: daysToSalary can legitimately be 0 (today IS the
+                      salary day), and "على 0 يوم" / "over 0 days" reads as
+                      broken/unnatural in both languages -- it implies the
+                      remaining balance is spread over a zero-length period,
+                      which doesn't make sense. Special-case 0 to say the
+                      balance is only meant to last for today. */}
+                  {daysToSalary === 0
+                    ? (isAr ? "لليوم فقط" : "for today only")
+                    : (isAr ? `على ${daysToSalary} يوم` : `over ${daysToSalary} days`)}
                 </div>
               </div>
             </div>
@@ -599,8 +607,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 type="button"
                 onClick={() => onNavigate('upcoming')}
                 aria-label={isAr
-                  ? `${comm.titleAr}، يستحق في ${comm.dueDate} ${curMonthAr}، اضغط لعرض التفاصيل`
-                  : `${comm.titleEn}, due on ${curMonthEn} ${comm.dueDate}, tap for details`}
+                  ? `${comm.titleAr}، يستحق في ${parseInt(comm.dueDate, 10)} ${curMonthAr}، اضغط لعرض التفاصيل`
+                  : `${comm.titleEn}, due on ${curMonthEn} ${parseInt(comm.dueDate, 10)}, tap for details`}
                 className="w-full text-start flex items-center justify-between py-1.5 px-2 rounded-xl hover:bg-emerald-950/20 transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-2.5">
@@ -610,7 +618,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       {isAr ? comm.titleAr : comm.titleEn}
                     </div>
                     <div className="text-[9px] text-slate-400">
-                      {isAr ? `يستحق في ${comm.dueDate} ${curMonthAr}` : `Due on ${curMonthEn} ${comm.dueDate}`}
+                      {/* M36 fix: dueDate is stored as a zero-padded string
+                          (e.g. "05" -- see mockData.ts), so interpolating it
+                          directly produced a raw leading zero like "Due on
+                          August 05" / "يستحق في 05 أغسطس". parseInt strips
+                          the padding for display without changing the
+                          stored value or any comparison logic elsewhere. */}
+                      {isAr ? `يستحق في ${parseInt(comm.dueDate, 10)} ${curMonthAr}` : `Due on ${curMonthEn} ${parseInt(comm.dueDate, 10)}`}
                     </div>
                   </div>
                 </div>

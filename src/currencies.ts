@@ -17,5 +17,13 @@ export const CURRENCIES: Currency[] = [
 ];
 
 export function getCurrency(code: string): Currency {
-  return CURRENCIES.find(c => c.code === code) || CURRENCIES[0];
+  // M29 fix: an unrecognized code (corrupted localStorage, a bad imported
+  // backup file, or a currency code added in a future version and then
+  // opened in an older build) used to fall back to CURRENCIES[0] = SAR
+  // silently. Silently assuming SAR is worse than showing no currency at
+  // all -- it confidently displays the WRONG currency symbol on every
+  // amount in the app with no indication anything is off. Falling back to
+  // the explicit "NONE" entry instead means an unrecognized code shows
+  // plain numbers (still correct/readable) rather than a false currency.
+  return CURRENCIES.find(c => c.code === code) || CURRENCIES.find(c => c.code === 'NONE')!;
 }
