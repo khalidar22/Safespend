@@ -155,7 +155,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     ? "You have exceeded the designated limit."
     : "No category has passed its monthly limit.";
 
-  const allUnpaidCommitments = commitments.filter(c => !c.paid);
+  // M5 fix: the "available today" balance calculation (App.tsx) and the other
+  // commitment lists (utils.ts, ExpenseAndLeakageScreens.tsx) all exclude
+  // deactivated commitments via `c.active !== false`. This dashboard counter
+  // and preview list used to filter only by `!c.paid`, so a deactivated-but-
+  // unpaid commitment (e.g. one restored via a JSON import) could still be
+  // counted/shown here while correctly being excluded from the balance math
+  // — making the badge count disagree with what's actually deducted.
+  const allUnpaidCommitments = commitments.filter(c => c.active !== false && !c.paid);
   // H16 fix: this preview only shows the first 3 items, so if they aren't
   // sorted by due-date proximity first, "top 3" can show 3 arbitrary/old
   // entries while hiding the one that's actually due soonest. Sorting before

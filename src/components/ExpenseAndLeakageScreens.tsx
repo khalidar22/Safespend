@@ -1434,9 +1434,16 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
 
         {/* Small recurring subscriptions */}
         <div className="bg-[#051613] rounded-2xl border border-emerald-950 p-4">
-          <h4 className="text-xs font-bold text-slate-100 mb-2">
+          <h4 className="text-xs font-bold text-slate-100 mb-0.5">
             {isAr ? "التزاماتك الصغيرة المتكررة" : "Small Recurring Commitments"}
           </h4>
+          {/* M3 fix: "small" here means below the price threshold set further down,
+              not "unimportant" — this line makes that explicit so it isn't misread. */}
+          <p className="text-[10px] text-slate-500 mb-2">
+            {isAr
+              ? "صغيرة بالسعر لا بالأهمية — حسب الحدّ المحدَّد أدناه."
+              : "Small by price, not importance — based on the threshold set below."}
+          </p>
           <div className="flex justify-between items-center text-xs py-1">
             <span className="text-slate-400">{isAr ? "المجموع الشهري:" : "Monthly total:"}</span>
             <span className={`font-bold ${totalSubsAmount > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
