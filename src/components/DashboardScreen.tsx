@@ -119,9 +119,18 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
   const totalSpentAll = liveSavingBoxes.reduce((sum, b) => sum + b.spent, 0);
 
-  const leakRatio = highestBox && highestBox.limit > 0
+  // M6 fix: highestBox.spent and .limit can each be the result of many chained
+  // float additions (via computeLiveSpent / sumAmounts elsewhere), so a user
+  // who has genuinely spent EXACTLY their limit could get a raw ratio like
+  // 1.0000000000000002 from pure IEEE754 rounding drift — not a real cent of
+  // overspend — which would wrongly flip isOverLimit to true below. Round to
+  // 4 decimal places (0.01% precision, far finer than anything ever
+  // displayed) to absorb that float noise while still catching any real
+  // overspend.
+  const rawLeakRatio = highestBox && highestBox.limit > 0
     ? highestBox.spent / highestBox.limit
     : 0;
+  const leakRatio = Math.round(rawLeakRatio * 10000) / 10000;
 
   // الإنذار الفعلي الوحيد: تجاوز الحد. ما دون 100% فالمستخدم داخل حدوده.
   const isOverLimit = leakRatio > 1.0;
@@ -505,13 +514,23 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
         <div className="grid grid-cols-2 gap-2">
           {liveSavingBoxes.slice(0, 2).map((box) => {
-            const pct = box.limit > 0 ? Math.min(100, Math.round((box.spent / box.limit) * 100)) : 0;
+            // M7 fix: this box could be the SAME box driving the banner above
+            // (highestBox/leakPercent), which shows the true uncapped
+            // percentage (e.g. "250%" when badly over budget). This card used
+            // to cap the percentage TEXT at 100 as well — needed for the
+            // progress bar's CSS width (a bar can't visually render past its
+            // container), but not for the number shown next to it — so the
+            // same box could show "250%" in the banner and "100%" here,
+            // looking like two different numbers for one box. Keep the true,
+            // uncapped percentage for display/aria-label; cap only the width.
+            const rawPct = box.limit > 0 ? Math.round((box.spent / box.limit) * 100) : 0;
+            const pct = Math.min(100, rawPct); // bar width only — CSS can't exceed 100%
             return (
               <button
                 key={box.id}
                 type="button"
                 onClick={() => onNavigate('boxes')}
-                aria-label={isAr ? `${box.titleAr}، ${pct}% من الحد المخصص، اضغط لعرض التفاصيل` : `${box.titleEn}, ${pct}% of limit used, tap for details`}
+                aria-label={isAr ? `${box.titleAr}، ${rawPct}% من الحد المخصص، اضغط لعرض التفاصيل` : `${box.titleEn}, ${rawPct}% of limit used, tap for details`}
                 className="bg-[#051613] border border-emerald-950/60 rounded-xl p-3 cursor-pointer hover:bg-[#071d19] transition-all w-full text-start block"
               >
                 <div className="flex justify-between items-center mb-1.5">
@@ -519,10 +538,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     {isAr ? box.titleAr : box.titleEn}
                   </span>
                   <span className="text-[9px] text-slate-400">
-                    {pct}%
+                    {rawPct}%
                   </span>
                 </div>
-                
+
                 {/* Progress bar */}
                 <div className="h-1.5 w-full bg-emerald-950/80 rounded-full overflow-hidden">
                   <div 

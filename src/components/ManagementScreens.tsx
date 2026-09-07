@@ -1335,6 +1335,14 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     });
 
     const totalMonthSpent = sumAmounts(currentMonthExpenses);
+    // M13 fix: totalMonthSpent is a running float sum. Comparing it to exactly
+    // 0 with `===` means one sub-cent transaction (or float drift from many
+    // small additions) could leave a value like 0.004 that's not === 0 but
+    // rounds to "0.00" in every displayed money figure — the empty state
+    // would then wrongly stay hidden while every number on screen reads
+    // zero. Round to the cent (the app's real money precision) before
+    // deciding whether the month is empty.
+    const isMonthEffectivelyEmpty = Math.round(totalMonthSpent * 100) / 100 <= 0;
 
     const maxWeekSum = Math.max(w1Sum, w2Sum, w3Sum, w4Sum, 1);
     
@@ -1427,7 +1435,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
           </button>
         </div>
 
-        {totalMonthSpent === 0 ? (
+        {isMonthEffectivelyEmpty ? (
           /* Honest Empty State */
           <div className="flex flex-col items-center justify-center text-center py-12 px-4 bg-[#051613] border border-emerald-950 rounded-3xl my-auto">
             <div className="w-16 h-16 rounded-full bg-emerald-950/50 flex items-center justify-center text-emerald-500 mb-4 border border-emerald-500/20">
@@ -1504,7 +1512,15 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
               {sortedCategories.slice(0, showAllCategories ? sortedCategories.length : 4).map((cat, i) => {
                 const hasLimit = cat.limit > 0;
                 const isUnlimitable = cat.titleEn === 'Installments' || cat.titleEn === 'Commitments';
-                const pct = hasLimit ? Math.round((cat.amount / cat.limit) * 100) : 0;
+                // M14 fix: cat.amount should never legitimately go negative (it's a
+                // running sum of expense transaction amounts), but corrupted/imported
+                // data (see the JSON-import validation gap) could still produce one.
+                // Without a floor, a negative pct here fails BOTH `pct > 100` and
+                // `pct >= 80` below and falls through to the emerald "safe" color/text
+                // — actively mislabeling bad data as a healthy, under-budget category.
+                // Clamp to 0 so corrupted data reads as "no usage" (neutral) rather
+                // than a false "safe" signal.
+                const pct = hasLimit ? Math.max(0, Math.round((cat.amount / cat.limit) * 100)) : 0;
                 const barColor = !hasLimit ? '#64748b' : pct > 100 ? '#f43f5e' : pct >= 80 ? '#f59e0b' : '#10b981';
                 const textColor = !hasLimit ? 'text-slate-400' : pct > 100 ? 'text-rose-400' : pct >= 80 ? 'text-amber-400' : 'text-emerald-400';
                 const overAmount = cat.amount - cat.limit;
