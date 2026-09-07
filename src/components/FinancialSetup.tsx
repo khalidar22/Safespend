@@ -267,7 +267,19 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                 <input
                   type="number"
                   value={userSalary || ''}
-                  onChange={(e) => setUserSalary(Math.max(0, Number(e.target.value)))}
+                  onChange={(e) => {
+                    // M17 fix: a value like "1e400" parses to Infinity, which used to
+                    // pass straight through (Math.max(0, Infinity) === Infinity) and
+                    // get saved to state/localStorage. Infinity isn't valid JSON —
+                    // JSON.stringify(Infinity) serializes to "null" — so on the next
+                    // reload the salary silently came back as 0/null with no
+                    // explanation to the user. Reject any non-finite parse outright
+                    // (keep the previous valid value) and cap to a generous but sane
+                    // upper bound so a typo/overflow can't produce an unusable number.
+                    const n = Number(e.target.value);
+                    if (!Number.isFinite(n)) return;
+                    setUserSalary(Math.min(1_000_000_000, Math.max(0, n)));
+                  }}
                   className="w-full px-4 py-2.5 bg-[#051411] border border-emerald-950 rounded-xl text-xs text-white font-mono font-bold focus:outline-none focus:border-emerald-500"
                   placeholder="15000"
                   min={1}

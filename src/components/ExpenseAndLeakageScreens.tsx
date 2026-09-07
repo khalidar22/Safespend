@@ -913,10 +913,20 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
                         specifically to keep numbers off-screen (e.g. in front of someone
                         else) — a direct privacy leak through a path that bypassed the
                         setting entirely. Now it masks the same way every other screen does. */}
-                    {isAr
-                      ? `هذا المصروف (${showBalances ? formatMoney(expenseAmount, lang, currency) : '•••'}) يتجاوز حدك المتاح لليوم (${showBalances ? formatMoney(availableToday, lang, currency) : '•••'}). هل أنت متأكد من رغبتك في الاستمرار؟`
-                      : `This expense (${showBalances ? formatMoney(expenseAmount, lang, currency) : '•••'}) exceeds your available safe daily limit of ${showBalances ? formatMoney(availableToday, lang, currency) : '•••'}. Are you sure you want to proceed?`
-                    }
+                    {/* M24 fix: expenseAmount is the raw text input state (e.g. "1,500.50"),
+                        not a number — formatMoney expects a number and previously received
+                        this string directly, silently skipping proper locale/comma
+                        formatting (String.prototype.toLocaleString exists too, so no
+                        TypeScript/runtime error, just broken output). Parse it the same
+                        way handleSaveExpense/handleConfirmExcess do (strip thousands
+                        commas, parseFloat) before formatting for display. */}
+                    {(() => {
+                      const excessAmt = parseFloat(expenseAmount.replace(/,/g, ''));
+                      const safeExcessAmt = Number.isFinite(excessAmt) ? excessAmt : 0;
+                      return isAr
+                        ? `هذا المصروف (${showBalances ? formatMoney(safeExcessAmt, lang, currency) : '•••'}) يتجاوز حدك المتاح لليوم (${showBalances ? formatMoney(availableToday, lang, currency) : '•••'}). هل أنت متأكد من رغبتك في الاستمرار؟`
+                        : `This expense (${showBalances ? formatMoney(safeExcessAmt, lang, currency) : '•••'}) exceeds your available safe daily limit of ${showBalances ? formatMoney(availableToday, lang, currency) : '•••'}. Are you sure you want to proceed?`;
+                    })()}
                   </p>
                 </div>
               </div>

@@ -10,7 +10,15 @@ import { getCurrency } from './currencies';
  */
 export function formatMoney(amount: number, lang: AppLanguage, currencyCode: string = 'SAR'): string {
   const isAr = lang === 'ar';
-  const formattedNumber = amount.toLocaleString(isAr ? 'ar-SA-u-nu-latn' : 'en-US', {
+  // M15/M24 fix: a non-finite or non-numeric amount (NaN from a corrupted
+  // calculation, Infinity from an unguarded overflow, or even a raw string
+  // accidentally passed in by a caller — String.prototype.toLocaleString
+  // exists too, so TypeScript alone doesn't catch that at runtime) used to
+  // render the literal text "NaN"/"Infinity" straight into the UI, or skip
+  // ar-SA locale formatting silently. Coerce first and fall back to a safe
+  // "0" display instead of ever leaking a broken value to the user.
+  const safeAmount = typeof amount === 'number' && Number.isFinite(amount) ? amount : 0;
+  const formattedNumber = safeAmount.toLocaleString(isAr ? 'ar-SA-u-nu-latn' : 'en-US', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2
   });
@@ -34,7 +42,12 @@ import { Transaction, SavingBox, Commitment, FamilyMember, Installment, Financia
  * inline across App.tsx and multiple screen components.
  */
 export function sumAmounts<T extends { amount: number }>(items: T[]): number {
-  return items.reduce((sum, item) => sum + item.amount, 0);
+  // M15 fix: one corrupted/non-finite `amount` (e.g. leftover NaN/Infinity
+  // from an old unguarded input, or a bad JSON import) used to poison the
+  // ENTIRE running total via NaN/Infinity propagation — every screen that
+  // calls sumAmounts would then silently show "NaN"/"∞" everywhere, with no
+  // way to tell which single item caused it. Skip non-finite items instead.
+  return items.reduce((sum, item) => Number.isFinite(item.amount) ? sum + item.amount : sum, 0);
 }
 
 /**
@@ -530,7 +543,16 @@ export function createDemoKidsCard(familyMemberId: string, spendingLimit: number
 }
 
 export function getZakatEstimate(goals: FinancialGoal[], currencyCode: string): ZakatEstimate {
-  const totalSavings = goals.filter(g => g.id !== 'zakat-box').reduce((s, g) => s + g.current, 0);
+  const rawTotalSavings = goals.filter(g => g.id !== 'zakat-box').reduce((s, g) => s + g.current, 0);
+  // M28 fix: repeated float addition above can leave totalSavings a hair
+  // below the true value (e.g. 17399.999999999998 instead of 17400) purely
+  // from IEEE754 rounding drift, not because the user actually has less
+  // saved. A strict `>=` against the nisab threshold would then wrongly
+  // report "not eligible" right at the boundary. Round to the nearest cent
+  // (the same precision money is ever displayed/stored at in this app)
+  // before comparing, so genuine cent-for-cent equality at the threshold is
+  // never lost to float noise.
+  const totalSavings = Math.round(rawTotalSavings * 100) / 100;
   const nisab = ZAKAT_NISAB_BY_CURRENCY[currencyCode] ?? ZAKAT_NISAB_BY_CURRENCY.SAR;
   const eligible = totalSavings >= nisab;
   const suggestedAmount = eligible ? Math.round(totalSavings * ZAKAT_RATE * 100) / 100 : 0;

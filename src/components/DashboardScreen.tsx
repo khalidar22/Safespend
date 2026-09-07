@@ -317,10 +317,22 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       const numberPart = parts[0];
                       const currencyPart = parts.slice(1).join(' ');
 
-                      // Dynamic font size based on number length — keeps text inside the fixed-size ring
+                      // M16 fix: dynamic font size based on number length — keeps text
+                      // inside the fixed-size ring. The old version only had 3 tiers
+                      // bottoming out at text-xl, so a pathologically long number (a
+                      // huge accumulated balance, or a corrupted/overflowed value)
+                      // still overflowed the ~136px ring visually. Added two smaller
+                      // tiers, PLUS a hard max-width + ellipsis safety net so that even
+                      // beyond the smallest font tier, the ring itself never breaks —
+                      // worst case the number truncates with "…" instead of spilling
+                      // outside the circle.
                       const len = numberPart.length;
                       let sizeClass = 'text-3xl';
-                      if (len > 8) {
+                      if (len > 14) {
+                        sizeClass = 'text-sm';
+                      } else if (len > 11) {
+                        sizeClass = 'text-base';
+                      } else if (len > 8) {
                         sizeClass = 'text-xl';
                       } else if (len > 5) {
                         sizeClass = 'text-2xl';
@@ -328,7 +340,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
                       return (
                         <>
-                          <span className={`${sizeClass} font-extrabold text-white tracking-tight font-mono whitespace-nowrap transition-all`}>
+                          <span
+                            className={`${sizeClass} font-extrabold text-white tracking-tight font-mono whitespace-nowrap transition-all max-w-[112px] overflow-hidden text-ellipsis`}
+                            title={formatted}
+                          >
                             {numberPart}
                           </span>
                           <span className="text-[11px] text-emerald-400 font-bold mt-1">{currencyPart}</span>
