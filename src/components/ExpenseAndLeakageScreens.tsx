@@ -202,6 +202,14 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
   // Overrun Warn States
   const [showExcessWarning, setShowExcessWarning] = useState<boolean>(false);
   const [bypassWarning, setBypassWarning] = useState<boolean>(false);
+  // M27 fix: handleSaveExpense's `andAddAnother` was only a local function
+  // argument — once the excess-limit warning intercepted the save and
+  // returned early, that intent was gone. handleConfirmExcess (the "yes,
+  // continue anyway" button) always navigated to the dashboard afterward,
+  // even if the user had clicked "Save & Add Another". This remembers that
+  // intent across the warning round-trip so confirming excess spend behaves
+  // the same as a normal save would have.
+  const [pendingAddAnother, setPendingAddAnother] = useState<boolean>(false);
 
   // Custom saving box popup states
   const [showAddBoxPopup, setShowAddBoxPopup] = useState<boolean>(false);
@@ -270,6 +278,7 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
     if (!Number.isFinite(amt) || amt <= 0) return;
 
     if (amt > availableToday && !bypassWarning) {
+      setPendingAddAnother(andAddAnother);
       setShowExcessWarning(true);
       return;
     }
@@ -324,12 +333,20 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
     setBypassWarning(false);
     setExpenseAmount('');
     setExpenseNote('');
-    onNavigate('dashboard');
+    // M27 fix: only navigate away when the original action was a plain
+    // "Save" — if the user had clicked "Save & Add Another", stay on this
+    // form (fields are already cleared above) so they can log the next one,
+    // matching what a non-excess save would have done.
+    if (!pendingAddAnother) {
+      onNavigate('dashboard');
+    }
+    setPendingAddAnother(false);
   };
 
   const handleCancelExcess = () => {
     setShowExcessWarning(false);
     setBypassWarning(false);
+    setPendingAddAnother(false);
   };
 
   const getIconForCategory = (iconName: string) => {
@@ -1099,14 +1116,24 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
                   
                   <div className="flex items-center gap-2">
                     <div className="text-right">
+                      {/* M25 fix: this row showed the raw number via toFixed(2)
+                          with no currency symbol at all, unlike every other
+                          amount in the app (which goes through formatMoney).
+                          A user scanning this list had no way to tell if "50.00"
+                          meant SAR, USD, or anything else. */}
                       <div className={`text-xs font-mono font-bold ${isExpense ? 'text-rose-400' : 'text-emerald-400'}`}>
-                        {isExpense ? '-' : '+'}{showBalances ? `${tx.amount.toFixed(2)}` : '•••'}
+                        {isExpense ? '-' : '+'}{showBalances ? formatMoney(tx.amount, lang, currency) : '•••'}
                       </div>
                     </div>
+                    {/* M26 fix: this delete button was only 32x32px (w-8 h-8),
+                        below the ~44px minimum touch target, and had no
+                        aria-label — a screen reader announced it as an
+                        unlabeled button next to a list of financial amounts. */}
                     <button
                       type="button"
                       onClick={() => setTransactionToDelete(tx)}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all ml-2"
+                      aria-label={isAr ? `حذف عملية: ${tx.titleAr}` : `Delete transaction: ${tx.titleEn}`}
+                      className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all ml-2"
                     >
                       <Trash2 size={15} />
                     </button>

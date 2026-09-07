@@ -114,6 +114,19 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
   if (screenId === 'language') {
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 justify-between p-8" dir="ltr">
+        {/* M20 fix: this screen previously had no way back to the splash
+            screen — a user who tapped "Get Started" by mistake, or simply
+            wanted to re-read the splash pitch, was stuck moving forward
+            only. No language has been chosen yet at this point, so the
+            label stays bilingual like the splash screen's own button. */}
+        <button
+          onClick={() => onNavigate('splash')}
+          aria-label="Back | رجوع"
+          className="self-start min-h-[44px] px-4 rounded-xl bg-emerald-950/40 border border-emerald-900/30 text-slate-400 hover:text-white transition-all flex items-center gap-1.5 text-xs font-bold"
+        >
+          <ArrowLeft size={14} />
+          <span>Back | رجوع</span>
+        </button>
         <div className="flex-1 flex flex-col justify-center items-center text-center">
           <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 border border-emerald-500/20 mb-6">
             <Globe size={32} className="animate-spin-slow" />
@@ -180,26 +193,49 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
             </button>
           ))}
         </div>
-        <button
-          onClick={() => onNavigate('onboarding')}
-          className="w-full py-3.5 px-4 rounded-xl bg-emerald-500 text-[#04120d] font-bold text-sm hover:bg-emerald-400 transition-all shrink-0"
-        >
-          {isAr ? "التالي" : "Next"}
-        </button>
+        {/* M20 fix: this screen previously only offered a forward "Next"
+            button, with no way back to the language screen. Paired it
+            with a Back button using the same flex gap-2 layout already
+            used for the persona/income_setup screens further down the
+            onboarding flow, for visual consistency. */}
+        <div className="flex gap-2 shrink-0">
+          <button
+            onClick={() => onNavigate('language')}
+            className="px-4 py-3.5 bg-emerald-950/40 border border-emerald-900/30 rounded-xl text-slate-400 text-sm font-bold hover:text-white transition-all"
+          >
+            {isAr ? "رجوع" : "Back"}
+          </button>
+          <button
+            onClick={() => onNavigate('onboarding')}
+            className="flex-1 py-3.5 px-4 rounded-xl bg-emerald-500 text-[#04120d] font-bold text-sm hover:bg-emerald-400 transition-all"
+          >
+            {isAr ? "التالي" : "Next"}
+          </button>
+        </div>
       </div>
     );
   }
 
   if (screenId === 'onboarding') {
     return (
-      <div 
-        className="flex flex-col h-full bg-[#030d0a] text-slate-100 justify-between p-8" 
+      <div
+        className="flex flex-col h-full bg-[#030d0a] text-slate-100 justify-between p-8"
         dir={isAr ? 'rtl' : 'ltr'}
       >
-        {/* Skip button */}
+        {/* M20 fix: added a Back button to the top row (previously just
+            "1 of 3" + Skip, with no way back to the currency screen).
+            justify-between with three children spreads Back to the start,
+            the slide counter in the middle, and Skip to the end. */}
         <div className="flex justify-between items-center text-xs">
+          <button
+            onClick={() => onNavigate('currency_setup')}
+            aria-label={isAr ? "رجوع" : "Back"}
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-white transition-all -m-2.5"
+          >
+            {isAr ? <ArrowRight size={16} /> : <ArrowLeft size={16} />}
+          </button>
           <span className="text-slate-400">1 of 3</span>
-          <button 
+          <button
             onClick={() => onNavigate('persona')}
             className="text-emerald-500 font-bold hover:underline"
           >

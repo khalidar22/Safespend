@@ -229,13 +229,26 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
           </div>
         </div>
 
-        <button 
-          onClick={() => onNavigate('income_setup')}
-          className="w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-[#030d0a] text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1"
-        >
-          <span>{isAr ? "متابعة" : "Continue"}</span>
-          {isAr ? <ArrowLeft size={14} /> : <ArrowRight size={14} />}
-        </button>
+        {/* M20 fix (found while investigating M20 in SplashLanguageOnboarding.tsx):
+            this screen also had no way back to the onboarding value-prop
+            screen — the same missing-back-button bug, one screen later in
+            the same flow. Matches the flex gap-2 Back+Continue layout
+            already used on the income_setup screen right after this one. */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => onNavigate('onboarding')}
+            className="px-4 py-3.5 bg-emerald-950/40 border border-emerald-900/30 rounded-2xl text-slate-400 text-xs font-bold hover:text-white transition-all"
+          >
+            {isAr ? "رجوع" : "Back"}
+          </button>
+          <button
+            onClick={() => onNavigate('income_setup')}
+            className="flex-1 py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-[#030d0a] text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1"
+          >
+            <span>{isAr ? "متابعة" : "Continue"}</span>
+            {isAr ? <ArrowLeft size={14} /> : <ArrowRight size={14} />}
+          </button>
+        </div>
       </div>
     );
   }
