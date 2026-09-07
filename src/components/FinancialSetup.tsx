@@ -18,6 +18,25 @@ import { AppLanguage, ScreenId, Commitment, FinancialPersona } from '../types';
 import { FINANCIAL_PERSONAS } from '../mockData';
 import { todayLocalISO } from '../utils';
 
+// H14 fix: for a brand-new user `commitments` starts as [] (App.tsx), so the
+// "Commitments Setup Checklist" screen below (the final, MANDATORY onboarding
+// step, "Step 3 of 3") rendered a completely empty list — despite its own
+// title/intro text promising a checklist of recurring bills to select from.
+// The only way to add anything was typing a bill from scratch via
+// "+ Add Custom Bill", which is a much worse first-run experience than
+// tapping a couple of common, universally-recognizable bill types. This is a
+// static list of suggestions only — tapping one just adds a real Commitment
+// with amount=0 as a placeholder (the amount field on each row is already
+// editable), it does NOT call handleToggleCommitment, so no fake "paid"
+// expense transaction is ever created just from using a suggestion.
+const SUGGESTED_COMMITMENTS: { titleEn: string; titleAr: string; category: string }[] = [
+  { titleEn: 'Rent', titleAr: 'الإيجار', category: 'housing' },
+  { titleEn: 'Electricity & Water', titleAr: 'الكهرباء والماء', category: 'utility' },
+  { titleEn: 'Internet', titleAr: 'الإنترنت', category: 'utility' },
+  { titleEn: 'Mobile Bill', titleAr: 'فاتورة الجوال', category: 'utility' },
+  { titleEn: 'Gym Membership', titleAr: 'اشتراك النادي', category: 'lifestyle' },
+];
+
 interface FinancialSetupProps {
   screenId: ScreenId;
   lang: AppLanguage;
@@ -106,6 +125,24 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
     setCustomTitleAr('');
     setCustomAmount(100);
     setShowAddCustom(false);
+  };
+
+  // H14 fix: adds a suggested bill directly (amount=0 placeholder, editable
+  // right on the row afterward) — a plain state update, same shape as
+  // handleAddCustomCommitment above, deliberately NOT handleToggleCommitment
+  // (which creates a real dated expense transaction and is meant for the
+  // live "mark this bill as paid" flow, not initial setup).
+  const handleAddSuggestedCommitment = (s: { titleEn: string; titleAr: string; category: string }) => {
+    const newComm: Commitment = {
+      id: `suggested-comm-${Date.now()}-${s.titleEn.replace(/\s+/g, '-')}`,
+      titleEn: s.titleEn,
+      titleAr: s.titleAr,
+      amount: 0,
+      dueDate: '1',
+      paid: false,
+      category: s.category,
+    };
+    setCommitments(prev => [...prev, newComm]);
   };
 
   const getPersonaIcon = (iconName: string) => {
@@ -328,10 +365,41 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
           </div>
 
           <p className="text-xs text-slate-400 mb-4 leading-normal">
-            {isAr 
-              ? "حدد التزاماتك الثابتة التي تسددها دورياً ليتم استقطاعها وتجنيبها من حد الصرف اليومي:" 
+            {isAr
+              ? "حدد التزاماتك الثابتة التي تسددها دورياً ليتم استقطاعها وتجنيبها من حد الصرف اليومي:"
               : "Check your recurring debts and fixed bills. These are locked to shield you from accidentally overspending:"}
           </p>
+
+          {/* H14 fix: quick-add suggestions so this mandatory step has real
+              content to interact with for every new user, not just an empty
+              list. Only shows suggestions not already added (by title), so
+              the row disappears once tapped instead of offering a duplicate. */}
+          {(() => {
+            const remainingSuggestions = SUGGESTED_COMMITMENTS.filter(
+              s => !commitments.some(c => c.titleEn === s.titleEn)
+            );
+            if (remainingSuggestions.length === 0) return null;
+            return (
+              <div className="mb-3">
+                <span className="text-[9px] text-emerald-500/80 font-bold px-1 block mb-1.5">
+                  {isAr ? "اقتراحات سريعة — اضغط للإضافة" : "Quick suggestions — tap to add"}
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {remainingSuggestions.map(s => (
+                    <button
+                      key={s.titleEn}
+                      type="button"
+                      onClick={() => handleAddSuggestedCommitment(s)}
+                      className="px-2.5 py-1.5 rounded-full border border-emerald-800/50 bg-[#061d19]/40 hover:border-emerald-500 hover:bg-[#061d19] text-emerald-400 text-[10px] font-bold flex items-center gap-1 transition-all"
+                    >
+                      <Plus size={10} />
+                      <span>{isAr ? s.titleAr : s.titleEn}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="flex flex-col gap-2 pr-1">
             {commitments.map((comm) => (
