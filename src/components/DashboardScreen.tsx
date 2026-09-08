@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Transaction, SavingBox, Commitment, FamilyMember, AppLanguage } from '../types';
 import { formatMoney, computeLiveSpent, sumAmounts, getPersonaInsight, sortCommitmentsByDueProximity } from '../utils';
+import { PERSONA_ACCENT } from '../mockData';
 
 interface DashboardScreenProps {
   lang: AppLanguage;
@@ -259,35 +260,49 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       </div>
 
       {/* Persona-Driven Insight — reflects the Financial Persona chosen on screen 4,
-          computed live from real boxes/commitments/family data (not a static label) */}
+          computed live from real boxes/commitments/family data (not a static label).
+          Color-per-persona experiment: 'warning' (amber) and 'success' (emerald)
+          tones are meaningful functional signals and stay as-is everywhere, so an
+          alert never gets diluted by an unrelated persona color. Only the neutral
+          'info' tone (no particular signal to raise) uses the selected persona's
+          own accent color instead of generic slate -- this is also the tone that
+          actually appears most often per persona (e.g. persona-1 always, and the
+          "not enough data yet" states for persona-3/persona-5). See PERSONA_ACCENT
+          in mockData.ts to adjust colors or fully remove this experiment. */}
       <div className="px-4 pt-4">
-        <div className={`rounded-2xl p-3.5 border flex items-start gap-2.5 ${
-          personaInsight.tone === 'warning'
+        {(() => {
+          const accent = PERSONA_ACCENT[selectedPersona || ''] || PERSONA_ACCENT['persona-1'];
+          const cardClass = personaInsight.tone === 'warning'
             ? 'bg-amber-500/5 border-amber-500/20'
             : personaInsight.tone === 'success'
             ? 'bg-emerald-500/5 border-emerald-500/20'
-            : 'bg-slate-500/5 border-slate-500/20'
-        }`}>
-          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-            personaInsight.tone === 'warning'
-              ? 'bg-amber-500/15 text-amber-400'
-              : personaInsight.tone === 'success'
-              ? 'bg-emerald-500/15 text-emerald-400'
-              : 'bg-slate-500/15 text-slate-300'
-          }`}>
-            <Sparkles size={14} />
-          </div>
-          <div className="flex-1">
-            <div className={`text-[10px] font-bold uppercase tracking-wider ${
-              personaInsight.tone === 'warning' ? 'text-amber-400' : personaInsight.tone === 'success' ? 'text-emerald-400' : 'text-slate-300'
-            }`}>
-              {isAr ? personaInsight.titleAr : personaInsight.titleEn}
+            : `${accent.cardBg} ${accent.cardBorder}`;
+          const iconClass = personaInsight.tone === 'warning'
+            ? 'bg-amber-500/15 text-amber-400'
+            : personaInsight.tone === 'success'
+            ? 'bg-emerald-500/15 text-emerald-400'
+            : `${accent.iconBgSubtle} ${accent.iconText}`;
+          const titleClass = personaInsight.tone === 'warning'
+            ? 'text-amber-400'
+            : personaInsight.tone === 'success'
+            ? 'text-emerald-400'
+            : accent.titleText;
+          return (
+            <div className={`rounded-2xl p-3.5 border flex items-start gap-2.5 ${cardClass}`}>
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${iconClass}`}>
+                <Sparkles size={14} />
+              </div>
+              <div className="flex-1">
+                <div className={`text-[10px] font-bold uppercase tracking-wider ${titleClass}`}>
+                  {isAr ? personaInsight.titleAr : personaInsight.titleEn}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
+                  {isAr ? personaInsight.bodyAr : personaInsight.bodyEn}
+                </p>
+              </div>
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">
-              {isAr ? personaInsight.bodyAr : personaInsight.bodyEn}
-            </p>
-          </div>
-        </div>
+          );
+        })()}
       </div>
 
       {/* Main Dial Card / Safe Spend Today */}

@@ -186,3 +186,33 @@ export const FINANCIAL_PERSONAS: FinancialPersona[] = [
     icon: 'sliders'
   }
 ];
+
+// EXPERIMENT (per user request, Sep 2026): a distinct accent color per
+// Financial Persona, so a person can visually tell which persona is active
+// at a glance. Deliberately scoped to just TWO places -- the persona picker
+// (FinancialSetup.tsx) and the dashboard's persona insight card
+// (DashboardScreen.tsx) -- rather than re-theming every screen, because the
+// app's core emerald brand color is hardcoded in ~635 places across the
+// codebase; a full re-skin would be a large, risky, separate project. Each
+// class below is a literal, static string (never built with a template
+// literal like `text-${color}-400`) because Tailwind only includes classes
+// it can find as literal text in the source at build time -- an
+// interpolated class name would silently vanish from the production build.
+// To fully remove this experiment: delete this const and its two import
+// sites in FinancialSetup.tsx and DashboardScreen.tsx.
+export const PERSONA_ACCENT: Record<string, {
+  iconText: string;
+  iconBgSelected: string;
+  borderSelected: string;
+  titleText: string;
+  dotBg: string;
+  cardBg: string;
+  cardBorder: string;
+  iconBgSubtle: string;
+}> = {
+  'persona-1': { iconText: 'text-emerald-400', iconBgSelected: 'bg-emerald-500/20', borderSelected: 'border-emerald-500', titleText: 'text-emerald-400', dotBg: 'bg-emerald-500', cardBg: 'bg-emerald-500/5', cardBorder: 'border-emerald-500/20', iconBgSubtle: 'bg-emerald-500/15' },
+  'persona-2': { iconText: 'text-violet-400', iconBgSelected: 'bg-violet-500/20', borderSelected: 'border-violet-500', titleText: 'text-violet-400', dotBg: 'bg-violet-500', cardBg: 'bg-violet-500/5', cardBorder: 'border-violet-500/20', iconBgSubtle: 'bg-violet-500/15' },
+  'persona-3': { iconText: 'text-sky-400', iconBgSelected: 'bg-sky-500/20', borderSelected: 'border-sky-500', titleText: 'text-sky-400', dotBg: 'bg-sky-500', cardBg: 'bg-sky-500/5', cardBorder: 'border-sky-500/20', iconBgSubtle: 'bg-sky-500/15' },
+  'persona-4': { iconText: 'text-orange-400', iconBgSelected: 'bg-orange-500/20', borderSelected: 'border-orange-500', titleText: 'text-orange-400', dotBg: 'bg-orange-500', cardBg: 'bg-orange-500/5', cardBorder: 'border-orange-500/20', iconBgSubtle: 'bg-orange-500/15' },
+  'persona-5': { iconText: 'text-fuchsia-400', iconBgSelected: 'bg-fuchsia-500/20', borderSelected: 'border-fuchsia-500', titleText: 'text-fuchsia-400', dotBg: 'bg-fuchsia-500', cardBg: 'bg-fuchsia-500/5', cardBorder: 'border-fuchsia-500/20', iconBgSubtle: 'bg-fuchsia-500/15' },
+};

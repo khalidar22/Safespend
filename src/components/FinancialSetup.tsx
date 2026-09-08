@@ -15,7 +15,7 @@ import {
   Activity
 } from 'lucide-react';
 import { AppLanguage, ScreenId, Commitment, FinancialPersona } from '../types';
-import { FINANCIAL_PERSONAS } from '../mockData';
+import { FINANCIAL_PERSONAS, PERSONA_ACCENT } from '../mockData';
 import { todayLocalISO } from '../utils';
 
 // H14 fix: for a brand-new user `commitments` starts as [] (App.tsx), so the
@@ -163,14 +163,17 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
     setShowAddCustom(true);
   };
 
-  const getPersonaIcon = (iconName: string) => {
+  // Color-per-persona experiment: iconColorClass is one of the literal,
+  // pre-defined PERSONA_ACCENT.iconText strings (see mockData.ts) -- never
+  // built dynamically -- so each persona's icon shows its own accent color.
+  const getPersonaIcon = (iconName: string, iconColorClass: string) => {
     switch (iconName) {
-      case 'activity': return <Activity size={20} className="text-emerald-400" />;
-      case 'hash': return <Hash size={20} className="text-emerald-400" />;
-      case 'users': return <Users size={20} className="text-emerald-400" />;
-      case 'credit-card': return <CreditCard size={20} className="text-emerald-400" />;
-      case 'sliders': return <Sliders size={20} className="text-emerald-400" />;
-      default: return <Sparkles size={20} className="text-emerald-400" />;
+      case 'activity': return <Activity size={20} className={iconColorClass} />;
+      case 'hash': return <Hash size={20} className={iconColorClass} />;
+      case 'users': return <Users size={20} className={iconColorClass} />;
+      case 'credit-card': return <CreditCard size={20} className={iconColorClass} />;
+      case 'sliders': return <Sliders size={20} className={iconColorClass} />;
+      default: return <Sparkles size={20} className={iconColorClass} />;
     }
   };
 
@@ -197,18 +200,21 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
           <div className="flex flex-col gap-2.5 overflow-y-auto flex-1 min-h-0 pr-1">
             {FINANCIAL_PERSONAS.map((p) => {
               const isSelected = selectedPersona === p.id;
+              // Color-per-persona experiment (see PERSONA_ACCENT in
+              // mockData.ts for the full rationale and how to remove it).
+              const accent = PERSONA_ACCENT[p.id] || PERSONA_ACCENT['persona-1'];
               return (
                 <div
                   key={p.id}
                   onClick={() => setSelectedPersona(p.id)}
                   className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
-                    isSelected 
-                      ? 'bg-[#061d19] border-emerald-500 shadow-md glow-emerald' 
+                    isSelected
+                      ? `bg-[#061d19] ${accent.borderSelected} shadow-md`
                       : 'bg-emerald-950/10 border-emerald-950/50 hover:bg-emerald-950/20'
                   }`}
                 >
-                  <div className={`p-2 rounded-xl ${isSelected ? 'bg-emerald-500/20' : 'bg-[#030d0a]'}`}>
-                    {getPersonaIcon(p.icon)}
+                  <div className={`p-2 rounded-xl ${isSelected ? accent.iconBgSelected : 'bg-[#030d0a]'}`}>
+                    {getPersonaIcon(p.icon, accent.iconText)}
                   </div>
                   <div className="flex-1">
                     <h3 className="text-xs font-bold text-white leading-tight">
@@ -219,7 +225,7 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                     </p>
                   </div>
                   <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                    isSelected ? 'border-emerald-500 bg-emerald-500' : 'border-slate-600'
+                    isSelected ? `${accent.borderSelected} ${accent.dotBg}` : 'border-slate-600'
                   }`}>
                     {isSelected && <Check size={10} className="text-[#030d0a] stroke-[3]" />}
                   </div>
