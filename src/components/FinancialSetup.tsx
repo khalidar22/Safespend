@@ -551,32 +551,43 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                 <span className="text-[9px] text-emerald-500/80 font-bold px-1">
                   {isAr ? "اسم الالتزام" : "Commitment Name"}
                 </span>
-                {/* M32 fix: stable field identity (always Arabic name, always English
-                    name) instead of swapping which state variable each input shows
-                    based on the current UI language. Previously, switching the app
-                    language mid-entry made whatever text the user had just typed
-                    visually "jump" to the other field with no warning. `required`
-                    was removed since it isn't tied to a fixed field anymore; the
-                    existing handleAddCustomCommitment check
+                {/* M32 fix: each field has a STABLE identity (always Arabic name,
+                    always English name) — the value shown and the setter called
+                    never change with the UI language, so switching languages
+                    mid-entry can no longer make typed text jump to the other
+                    field. Only the on-screen ORDER follows the current language
+                    (current-language field first); that's a display position
+                    only, not a data binding. `required` was removed since it
+                    isn't tied to a fixed field anymore; the existing
+                    handleAddCustomCommitment check
                     (!customTitleEn && !customTitleAr) already blocks submitting
                     with both fields empty. */}
                 <div className="grid grid-cols-2 gap-1.5">
-                  <input
-                    type="text"
-                    value={customTitleAr}
-                    onChange={e => setCustomTitleAr(e.target.value)}
-                    placeholder={isAr ? "اسم الالتزام بالعربية" : "Name (Arabic)"}
-                    dir="rtl"
-                    className="bg-[#030d0a] border border-emerald-950 px-2 py-1 rounded text-[10px] text-white"
-                  />
-                  <input
-                    type="text"
-                    value={customTitleEn}
-                    onChange={e => setCustomTitleEn(e.target.value)}
-                    placeholder={isAr ? "بالإنجليزية (اختياري)" : "Name (English, optional)"}
-                    dir="ltr"
-                    className="bg-[#030d0a] border border-emerald-950 px-2 py-1 rounded text-[10px] text-white"
-                  />
+                  {(() => {
+                    const arabicField = (
+                      <input
+                        key="ar"
+                        type="text"
+                        value={customTitleAr}
+                        onChange={e => setCustomTitleAr(e.target.value)}
+                        placeholder={isAr ? "اسم الالتزام بالعربية" : "Name (Arabic)"}
+                        dir="rtl"
+                        className="bg-[#030d0a] border border-emerald-950 px-2 py-1 rounded text-[10px] text-white"
+                      />
+                    );
+                    const englishField = (
+                      <input
+                        key="en"
+                        type="text"
+                        value={customTitleEn}
+                        onChange={e => setCustomTitleEn(e.target.value)}
+                        placeholder={isAr ? "بالإنجليزية (اختياري)" : "Name (English, optional)"}
+                        dir="ltr"
+                        className="bg-[#030d0a] border border-emerald-950 px-2 py-1 rounded text-[10px] text-white"
+                      />
+                    );
+                    return isAr ? <>{arabicField}{englishField}</> : <>{englishField}{arabicField}</>;
+                  })()}
                 </div>
               </div>
 

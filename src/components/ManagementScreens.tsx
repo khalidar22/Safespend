@@ -1882,30 +1882,41 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
             </div>
 
             <div className="flex flex-col gap-2">
-              {/* M32 fix: stable field identity (always Arabic name, always English
-                  name) instead of swapping which state variable each input shows
-                  based on the current UI language. Previously, switching the app
-                  language mid-entry made whatever text the user had just typed
-                  visually "jump" to the other field with no warning. The `required`
-                  attribute was removed since it isn't tied to a fixed field anymore;
-                  the existing handleAddGoal check (!goalTitleEn && !goalTitleAr)
-                  already blocks submitting with both fields empty. */}
-              <input
-                type="text"
-                value={goalTitleAr}
-                onChange={e => setGoalTitleAr(e.target.value)}
-                placeholder={isAr ? "اسم الهدف بالعربية" : "Goal name (Arabic)"}
-                dir="rtl"
-                className="bg-[#030d0a] border border-emerald-950 px-3 py-2 text-xs rounded-xl text-white"
-              />
-              <input
-                type="text"
-                value={goalTitleEn}
-                onChange={e => setGoalTitleEn(e.target.value)}
-                placeholder={isAr ? "اسم الهدف بالإنجليزية (اختياري)" : "Goal name (English, optional)"}
-                dir="ltr"
-                className="bg-[#030d0a] border border-emerald-950 px-3 py-2 text-xs rounded-xl text-white"
-              />
+              {/* M32 fix: each field has a STABLE identity (always Arabic name,
+                  always English name) — the value shown and the setter called never
+                  change with the UI language, so switching languages mid-entry can
+                  no longer make typed text jump to the other field. Only the
+                  on-screen ORDER follows the current language (current-language
+                  field on top); that's a display position only, not a data binding.
+                  `required` was removed since it isn't tied to a fixed field
+                  anymore; the existing handleAddGoal check
+                  (!goalTitleEn && !goalTitleAr) already blocks submitting with both
+                  fields empty. */}
+              {(() => {
+                const arabicField = (
+                  <input
+                    key="ar"
+                    type="text"
+                    value={goalTitleAr}
+                    onChange={e => setGoalTitleAr(e.target.value)}
+                    placeholder={isAr ? "اسم الهدف بالعربية" : "Goal name (Arabic)"}
+                    dir="rtl"
+                    className="bg-[#030d0a] border border-emerald-950 px-3 py-2 text-xs rounded-xl text-white"
+                  />
+                );
+                const englishField = (
+                  <input
+                    key="en"
+                    type="text"
+                    value={goalTitleEn}
+                    onChange={e => setGoalTitleEn(e.target.value)}
+                    placeholder={isAr ? "اسم الهدف بالإنجليزية (اختياري)" : "Goal name (English, optional)"}
+                    dir="ltr"
+                    className="bg-[#030d0a] border border-emerald-950 px-3 py-2 text-xs rounded-xl text-white"
+                  />
+                );
+                return isAr ? <>{arabicField}{englishField}</> : <>{englishField}{arabicField}</>;
+              })()}
               <div className="relative">
                 <input
                   type="number"

@@ -586,49 +586,55 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
               </h3>
               
               <div className="flex flex-col gap-3">
-                {/* M32 fix: each field now has a STABLE identity (always Arabic name,
-                    always English name) instead of swapping which state variable it
-                    shows based on the current UI language. Previously, switching the
-                    app language mid-entry made whatever text the user had just typed
-                    visually "jump" to the other field with no warning, because the
-                    same input swapped from displaying newBoxTitleAr to newBoxTitleEn
-                    (or vice versa) the instant isAr changed. Binding is now fixed;
-                    only the label text is translated. */}
-                <div>
-                  <label className="text-[10px] text-emerald-400 font-bold block mb-1">
-                    {isAr ? "اسم الفئة بالعربية" : "Category Name (Arabic)"}
-                  </label>
-                  <input
-                    type="text"
-                    value={newBoxTitleAr}
-                    onChange={(e) => setNewBoxTitleAr(e.target.value)}
-                    placeholder="مثال: الترفيه والتسوق"
-                    dir="rtl"
-                    className="w-full px-3 py-2 bg-[#020d0a] border border-emerald-950 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] text-emerald-400 font-bold block mb-1">
-                    {isAr ? "اسم الفئة بالإنجليزية (اختياري)" : "Category Name (English, optional)"}
-                  </label>
-                  <input
-                    type="text"
-                    value={newBoxTitleEn}
-                    onChange={(e) => setNewBoxTitleEn(e.target.value)}
-                    placeholder="e.g. Entertainment"
-                    dir="ltr"
-                    className="w-full px-3 py-2 bg-[#020d0a] border border-emerald-950 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
-                  />
-                  {/* M8 fix: a duplicate category name isn't just a display nuisance —
-                      elsewhere (leak detection, delete-balance-reversal) any transaction
-                      missing a boxId falls back to matching by name, and a duplicate name
-                      makes that fallback double-count or double-reverse across BOTH boxes.
-                      Block it here at the source, with a clear reason. */}
-                  {newBoxNameError && (
-                    <p className="text-[10px] text-rose-400 font-bold mt-1">{newBoxNameError}</p>
-                  )}
-                </div>
+                {/* M32 fix: each field has a STABLE identity (always Arabic name,
+                    always English name) — the VALUE a field shows and the setter it
+                    calls never change with the UI language, so switching languages
+                    mid-entry can no longer make typed text visually "jump" to the
+                    other field. Only the on-screen ORDER of the two fields follows
+                    the current language (current-language field on top), which is
+                    purely a display position and does not affect which state
+                    variable either field is bound to. */}
+                {(() => {
+                  const arabicField = (
+                    <div key="ar">
+                      <label className="text-[10px] text-emerald-400 font-bold block mb-1">
+                        {isAr ? "اسم الفئة بالعربية" : "Category Name (Arabic)"}
+                      </label>
+                      <input
+                        type="text"
+                        value={newBoxTitleAr}
+                        onChange={(e) => setNewBoxTitleAr(e.target.value)}
+                        placeholder="مثال: الترفيه والتسوق"
+                        dir="rtl"
+                        className="w-full px-3 py-2 bg-[#020d0a] border border-emerald-950 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  );
+                  const englishField = (
+                    <div key="en">
+                      <label className="text-[10px] text-emerald-400 font-bold block mb-1">
+                        {isAr ? "اسم الفئة بالإنجليزية (اختياري)" : "Category Name (English, optional)"}
+                      </label>
+                      <input
+                        type="text"
+                        value={newBoxTitleEn}
+                        onChange={(e) => setNewBoxTitleEn(e.target.value)}
+                        placeholder="e.g. Entertainment"
+                        dir="ltr"
+                        className="w-full px-3 py-2 bg-[#020d0a] border border-emerald-950 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
+                      />
+                      {/* M8 fix: a duplicate category name isn't just a display nuisance —
+                          elsewhere (leak detection, delete-balance-reversal) any transaction
+                          missing a boxId falls back to matching by name, and a duplicate name
+                          makes that fallback double-count or double-reverse across BOTH boxes.
+                          Block it here at the source, with a clear reason. */}
+                      {newBoxNameError && (
+                        <p className="text-[10px] text-rose-400 font-bold mt-1">{newBoxNameError}</p>
+                      )}
+                    </div>
+                  );
+                  return isAr ? <>{arabicField}{englishField}</> : <>{englishField}{arabicField}</>;
+                })()}
 
                 <div>
                   <label className="text-[10px] text-emerald-400 font-bold block mb-1">
