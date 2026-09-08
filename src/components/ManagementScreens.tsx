@@ -588,10 +588,21 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
           setImportError(null);
           onImportState(parsed);
         } else {
-          setImportError(isAr ? 'خطأ في قراءة ملف البيانات. تأكد أن الملف صحيح.' : 'Error reading data file. Please make sure the file is valid.');
+          // M47 fix: "make sure the file is valid" gave the user no actual
+          // next step -- valid how? Spell out exactly what kind of file is
+          // expected and where to get one, so a person who picked the wrong
+          // file knows what to do differently.
+          setImportError(isAr
+            ? 'هذا الملف ليس نسخة بيانات صحيحة من SafeSpend. تأكد من اختيار ملف JSON تم تصديره سابقاً من هذا التطبيق عبر زر "تصدير البيانات"، ثم حاول مرة أخرى.'
+            : 'This file is not a valid SafeSpend backup. Make sure you\'re selecting a JSON file that was previously exported from this app using the "Export Data" button, then try again.');
         }
       } catch (err) {
-        setImportError(isAr ? 'خطأ في قراءة ملف البيانات. تأكد أن الملف صحيح.' : 'Error reading data file. Please make sure the file is valid.');
+        // M47 fix: same actionable-guidance improvement for the JSON
+        // syntax-error case (e.g. a non-JSON file, or a corrupted/edited
+        // export) -- tell the user what to pick, not just that it failed.
+        setImportError(isAr
+          ? 'تعذّرت قراءة هذا الملف كملف بيانات SafeSpend. تأكد من اختيار ملف JSON صحيح تم تصديره سابقاً من هذا التطبيق (وليس معدَّلاً يدوياً)، ثم حاول مرة أخرى.'
+          : 'This file could not be read as SafeSpend data. Make sure you\'re selecting a valid, unmodified JSON file that was previously exported from this app, then try again.');
       }
     };
     reader.readAsText(file);

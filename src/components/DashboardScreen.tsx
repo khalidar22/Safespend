@@ -240,7 +240,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </div>
 
         {/* Date line */}
-        <div className="mt-3 flex items-center justify-between text-[11px] text-emerald-500/50">
+        {/* M46 fix: text-emerald-500/50 on this screen's dark background
+            measured ~2.5:1 contrast, below the WCAG AA 4.5:1 minimum for
+            normal-size text. Dropping the /50 opacity (full-strength
+            emerald-500, the same shade already used at full opacity
+            elsewhere in the app) restores adequate contrast without
+            changing the color itself. */}
+        <div className="mt-3 flex items-center justify-between text-[11px] text-emerald-500">
           <div>{formattedDate}</div>
           <div className="flex items-center gap-1">
             {/* H3 fix: this app has no server/cloud backend (verified: no fetch/axios
@@ -380,11 +386,22 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
             {/* Remaining salary balance for the rest of the cycle */}
             <div className="mt-4 bg-[#04120f] border border-emerald-600/50 rounded-2xl p-3.5 flex justify-between items-center">
-              <span className="text-[11px] text-slate-400 font-bold leading-tight">
+              <span className="text-[11px] text-slate-400 font-bold leading-tight shrink-0">
                 {isAr ? "المتبقي من الراتب" : "Remaining salary"}
               </span>
-              <div className="text-left" dir={isAr ? 'rtl' : 'ltr'}>
-                <div className="text-lg font-bold text-emerald-400 font-mono leading-tight whitespace-nowrap">
+              {/* M34 fix: only the main "safe spend" ring number had dynamic
+                  font sizing + a truncation safety net. Every other money
+                  figure on this screen used a fixed font size with no
+                  overflow protection, so an unusually large number (a big
+                  salary, an imported figure) could visually break out of its
+                  card. Added min-w-0 (lets a flex child actually shrink) plus
+                  truncate + a title attribute (full value on long-press/hover)
+                  to each one, matching the ring's existing safety pattern. */}
+              <div className="text-left min-w-0" dir={isAr ? 'rtl' : 'ltr'}>
+                <div
+                  className="text-lg font-bold text-emerald-400 font-mono leading-tight truncate"
+                  title={showBalances ? formatMoney(remainingSalary, lang, currency) : undefined}
+                >
                   {showBalances ? formatMoney(remainingSalary, lang, currency) : '••••'}
                 </div>
                 <div className="text-[9px] text-emerald-400/70 font-medium mt-0.5">
@@ -424,7 +441,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <span className="text-[10px] text-slate-400 leading-tight block h-6">
             {isAr ? "الالتزامات القادمة" : "Upcoming Bills"}
           </span>
-          <div className="my-1 text-xs font-bold text-amber-500 font-mono">
+          {/* M34 fix: truncate + title so a large amount can't overflow this
+              narrow (1-of-3 grid column) card. */}
+          <div
+            className="my-1 text-xs font-bold text-amber-500 font-mono truncate"
+            title={showBalances ? formatMoney(upcomingSum, lang, currency) : undefined}
+          >
             {showBalances ? formatMoney(upcomingSum, lang, currency) : '••••'}
           </div>
           <span className="text-[9px] text-amber-500/80 font-medium">
@@ -437,7 +459,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <span className="text-[10px] text-slate-400 leading-tight block h-6">
             {isAr ? "الالتزامات المدفوعة" : "Bills Paid"}
           </span>
-          <div className="my-1 text-xs font-bold text-emerald-400 font-mono">
+          <div
+            className="my-1 text-xs font-bold text-emerald-400 font-mono truncate"
+            title={showBalances ? formatMoney(paidSum, lang, currency) : undefined}
+          >
             {showBalances ? formatMoney(paidSum, lang, currency) : '••••'}
           </div>
           <span className="text-[9px] text-emerald-400/80 font-medium">
@@ -568,11 +593,20 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   ></div>
                 </div>
 
-                <div className="flex justify-between items-center mt-2 text-[10px]">
-                  <span className="text-emerald-500/90 font-bold font-mono">
+                {/* M34 fix: both figures get min-w-0 + truncate so a large
+                    spent/limit amount can't push this row wider than the
+                    2-column category card. */}
+                <div className="flex justify-between items-center mt-2 text-[10px] gap-1">
+                  <span
+                    className="text-emerald-500/90 font-bold font-mono min-w-0 truncate"
+                    title={showBalances ? formatMoney(box.spent, lang, currency) : undefined}
+                  >
                     {showBalances ? formatMoney(box.spent, lang, currency) : '•••'}
                   </span>
-                  <span className="text-slate-400 font-bold font-mono">
+                  <span
+                    className="text-slate-400 font-bold font-mono min-w-0 truncate shrink-0"
+                    title={showBalances ? formatMoney(box.limit, lang, currency) : undefined}
+                  >
                     {isAr ? "من" : "of"} {showBalances ? formatMoney(box.limit, lang, currency) : '•••'}
                   </span>
                 </div>
@@ -628,8 +662,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-xs font-bold text-slate-100 font-mono">
+                <div className="text-right min-w-0">
+                  {/* M34 fix: truncate + title guard against a large amount. */}
+                  <div
+                    className="text-xs font-bold text-slate-100 font-mono truncate"
+                    title={showBalances ? formatMoney(comm.amount, lang, currency) : undefined}
+                  >
                     {showBalances ? formatMoney(comm.amount, lang, currency) : '•••'}
                   </div>
                 </div>

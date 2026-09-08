@@ -74,7 +74,15 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
               Debt-Safe. Smarter Spending.
             </h2>
             <div className="w-8 h-[1px] bg-emerald-500/30"></div>
-            <h2 className="text-xs font-semibold text-emerald-500/70 tracking-widest uppercase">
+            {/* M49 fix: this screen is forced dir="ltr" as a whole (it mixes
+                both languages before the user has picked one), so any Arabic
+                text inside it needs its own dir="rtl" override to lay out
+                correctly -- the longer Arabic paragraph further down already
+                had one, but this short Arabic tagline didn't, so it rendered
+                under LTR bidi rules (wrong alignment) while its sibling text
+                rendered correctly. Added the same override here for
+                consistency. */}
+            <h2 className="text-xs font-semibold text-emerald-500/70 tracking-widest uppercase" dir="rtl">
               يحميك من فخ الأقساط
             </h2>
           </div>
@@ -90,20 +98,34 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
           </div>
         </div>
 
+        {/* M48 fix: this button packs two full text strings ("ابدأ الآن" and
+            "Get Started") plus a separator and an icon into one row with no
+            overflow protection (flex rows don't wrap by default). On a
+            narrow screen or with a larger system font size, the content
+            could overflow the button's edges instead of reflowing. Added
+            flex-wrap + centered alignment on both the button and the inner
+            text group so the content wraps onto a second line gracefully
+            (button just grows taller) instead of clipping or spilling out. */}
         <div className="flex flex-col gap-3">
-          <button 
+          <button
             onClick={() => onNavigate('language')}
-            className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-[#030d0a] text-sm font-black tracking-wide shadow-xl shadow-emerald-500/25 hover:scale-[1.03] active:scale-95 transition-all duration-200 flex items-center justify-center gap-2.5 border border-emerald-300/50 cursor-pointer"
+            className="w-full py-4 px-3 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-[#030d0a] text-sm font-black tracking-wide shadow-xl shadow-emerald-500/25 hover:scale-[1.03] active:scale-95 transition-all duration-200 flex flex-wrap items-center justify-center gap-2.5 border border-emerald-300/50 cursor-pointer"
           >
-            <span className="font-extrabold flex items-center gap-2">
+            <span className="font-extrabold flex flex-wrap items-center justify-center gap-2">
               <span>ابدأ الآن</span>
               <span className="opacity-40 font-light">|</span>
               <span>Get Started</span>
             </span>
-            <ArrowRight size={18} className="stroke-[3]" />
+            <ArrowRight size={18} className="stroke-[3] shrink-0" />
           </button>
           
-          <div className="text-[10px] text-emerald-600/60 font-medium">
+          {/* M46 fix: text-emerald-600/60 on this dark splash background
+              measured ~2.5:1 contrast, below the WCAG AA 4.5:1 minimum for
+              normal-size text. Switched to the lighter emerald-500 shade
+              already used at full opacity elsewhere in this file (e.g. the
+              step label further down), which reads clearly against the
+              same background while staying visually secondary/muted. */}
+          <div className="text-[10px] text-emerald-500 font-medium">
             SafeSpend V1.4.0 • Android App Demo
           </div>
         </div>
