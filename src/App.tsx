@@ -45,13 +45,14 @@ import {
   LinkedBankAccount,
   KidsCard
 } from './types';
-import { 
-  INITIAL_TRANSACTIONS, 
-  INITIAL_SAVING_BOXES, 
-  INITIAL_COMMITMENTS, 
-  INITIAL_INSTALLMENTS, 
-  INITIAL_GOALS, 
-  INITIAL_FAMILY_MEMBERS 
+import {
+  INITIAL_TRANSACTIONS,
+  INITIAL_SAVING_BOXES,
+  INITIAL_COMMITMENTS,
+  INITIAL_INSTALLMENTS,
+  INITIAL_GOALS,
+  INITIAL_FAMILY_MEMBERS,
+  PERSONA_ACCENT
 } from './mockData';
 import { formatMoney, computeLiveSpent, getCycleBounds, sumAmounts, todayLocalISO } from './utils';
 
@@ -678,6 +679,16 @@ export default function App() {
 
   const showBottomNav = !['splash', 'language', 'currency_setup', 'onboarding', 'persona', 'income_setup', 'commitments_setup'].includes(activeScreen);
 
+  // EXPERIMENT (per user request, Sep 2026 -- extends the persona-color
+  // experiment in mockData.ts): the persona's accent color now also tints
+  // the single "Smartphone Frame Outer shell" below, which is the ONE
+  // element every screen in the whole app renders inside. This is a
+  // one-line, one-element change (not a per-screen re-skin) yet the color
+  // is visible on every page automatically, since they all share this
+  // frame. To revert: change frameAccent.borderSelected back to the
+  // original literal border-[#1f2022].
+  const frameAccent = PERSONA_ACCENT[selectedPersona || ''] || PERSONA_ACCENT['persona-1'];
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#020706] text-slate-100 flex flex-col justify-between selection:bg-emerald-500 selection:text-black">
       
@@ -689,7 +700,7 @@ export default function App() {
         <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-teal-500/5 rounded-full blur-3xl pointer-events-none"></div>
 
         {/* Smartphone Frame Outer shell (Obsidian Sleek Design) */}
-        <div className="relative w-[375px] h-[760px] rounded-[52px] bg-[#0b0c10] border-[10px] border-[#1f2022] p-1.5 shadow-2xl shadow-emerald-500/10 glow-emerald flex flex-col overflow-hidden transition-all duration-300 z-10">
+        <div className={`relative w-[375px] h-[760px] rounded-[52px] bg-[#0b0c10] border-[10px] ${frameAccent.borderSelected} p-1.5 shadow-2xl shadow-emerald-500/10 glow-emerald flex flex-col overflow-hidden transition-all duration-300 z-10`}>
           
           {/* Ambient Screen Glass Reflection */}
           <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/[0.03] to-transparent pointer-events-none rounded-t-[40px] z-20"></div>
