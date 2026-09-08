@@ -69,6 +69,25 @@ export function todayLocalISO(): string {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * M31 fix: transaction/commitment dates are stored as "YYYY-MM-DD" strings
+ * meant to represent a LOCAL calendar day (see todayLocalISO above), but
+ * `new Date("YYYY-MM-DD")` does NOT parse that as local midnight -- the
+ * date-only ISO form is defined to parse as UTC midnight. Cycle boundaries
+ * (getCycleBounds) are built with `new Date(year, month, day)`, which IS
+ * local midnight. Comparing a UTC-midnight moment against local-midnight
+ * boundaries mixes two different "midnights" that are offset by the
+ * device's UTC offset -- harmless in some timezones/date ranges, but not
+ * a safe general assumption, and inconsistent with how every other date
+ * in this app is deliberately kept local-only (see H10/H11). Always parse
+ * a stored "YYYY-MM-DD" string with this helper (never bare `new Date(...)`)
+ * when comparing it against local cycle/day boundaries.
+ */
+export function parseLocalDateOnly(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
 // H16 fix: shared sort helper so every screen that lists commitments (the
 // dedicated "Upcoming Commitments" screen AND the Dashboard's preview widget)
 // orders them the same way — by how soon each is actually due — instead of

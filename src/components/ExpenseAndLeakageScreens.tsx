@@ -50,7 +50,7 @@ import {
   Search,
 } from 'lucide-react';
 import { AppLanguage, ScreenId, Transaction, SavingBox, Commitment, FinancialGoal } from '../types';
-import { formatMoney, computeLiveSpent, getCycleBounds, sumAmounts } from '../utils';
+import { formatMoney, computeLiveSpent, getCycleBounds, sumAmounts, parseLocalDateOnly } from '../utils';
 
 const EMOJI_SECTIONS: { ar: string; en: string; items: [string, string][] }[] = [
   { ar: 'طعام وشراب', en: 'Food & Drink', items: [
@@ -586,29 +586,38 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
               </h3>
               
               <div className="flex flex-col gap-3">
+                {/* M32 fix: each field now has a STABLE identity (always Arabic name,
+                    always English name) instead of swapping which state variable it
+                    shows based on the current UI language. Previously, switching the
+                    app language mid-entry made whatever text the user had just typed
+                    visually "jump" to the other field with no warning, because the
+                    same input swapped from displaying newBoxTitleAr to newBoxTitleEn
+                    (or vice versa) the instant isAr changed. Binding is now fixed;
+                    only the label text is translated. */}
                 <div>
                   <label className="text-[10px] text-emerald-400 font-bold block mb-1">
-                    {isAr ? "اسم الفئة" : "Category Name"}
+                    {isAr ? "اسم الفئة بالعربية" : "Category Name (Arabic)"}
                   </label>
                   <input
                     type="text"
-                    value={isAr ? newBoxTitleAr : newBoxTitleEn}
-                    onChange={(e) => isAr ? setNewBoxTitleAr(e.target.value) : setNewBoxTitleEn(e.target.value)}
-                    placeholder={isAr ? "مثال: الترفيه والتسوق" : "e.g. Entertainment"}
+                    value={newBoxTitleAr}
+                    onChange={(e) => setNewBoxTitleAr(e.target.value)}
+                    placeholder="مثال: الترفيه والتسوق"
+                    dir="rtl"
                     className="w-full px-3 py-2 bg-[#020d0a] border border-emerald-950 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
-                    required
                   />
                 </div>
 
                 <div>
                   <label className="text-[10px] text-emerald-400 font-bold block mb-1">
-                    {isAr ? "اسم بديل (اختياري)" : "Alternative name (optional)"}
+                    {isAr ? "اسم الفئة بالإنجليزية (اختياري)" : "Category Name (English, optional)"}
                   </label>
                   <input
                     type="text"
-                    value={isAr ? newBoxTitleEn : newBoxTitleAr}
-                    onChange={(e) => isAr ? setNewBoxTitleEn(e.target.value) : setNewBoxTitleAr(e.target.value)}
-                    placeholder={isAr ? "مثال: Entertainment" : "مثال: الترفيه والتسوق"}
+                    value={newBoxTitleEn}
+                    onChange={(e) => setNewBoxTitleEn(e.target.value)}
+                    placeholder="e.g. Entertainment"
+                    dir="ltr"
                     className="w-full px-3 py-2 bg-[#020d0a] border border-emerald-950 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500"
                   />
                   {/* M8 fix: a duplicate category name isn't just a display nuisance —
@@ -1366,7 +1375,12 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
     const { cycleStart: leak_cycleStart, cycleEnd: leak_cycleEnd } = getCycleBounds(salaryDay);
     const monthExpenses = transactions.filter(t => {
       if (t.type !== 'expense') return false;
-      const d = new Date(t.date);
+      // M31 fix: t.date is a local-calendar-day string ("YYYY-MM-DD");
+      // parsing it with bare `new Date(...)` reads it as UTC midnight
+      // instead of local midnight, mismatched against leak_cycleStart/End
+      // (which ARE local midnight). parseLocalDateOnly keeps both sides
+      // of this comparison in the same "local midnight" terms.
+      const d = parseLocalDateOnly(t.date);
       return d >= leak_cycleStart && d < leak_cycleEnd;
     });
     const boxesWithLimit = (savingBoxes || []).filter(b => b.limit > 0);
