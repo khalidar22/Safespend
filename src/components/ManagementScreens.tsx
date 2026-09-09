@@ -2583,7 +2583,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                   {isAr ? (
                     <>
                       <p><strong className="text-emerald-400">عن هذا التطبيق:</strong> SafeSpend نسخة محاكاة تجريبية (Simulator) لإدارة المصروفات الشخصية، تعمل بالكامل على جهازك بلا خادم أو حساب أو اتصال إنترنت مطلوب لعملها.</p>
-                      <p><strong className="text-emerald-400">لا يوجد فريق دعم حي حالياً:</strong> بما أن هذا وضع تجريبي محلي بالكامل، لا يوجد فريق دعم بشري يستقبل رسائل أو تذاكر دعم في هذه النسخة — هذا القسم يوثّق الإجابات على الأسئلة الأكثر شيوعاً بدلاً من ذلك.</p>
+                      <p><strong className="text-emerald-400">لا يوجد فريق دعم رسمي حالياً:</strong> بما أن هذا وضع تجريبي محلي بالكامل، لا يوجد فريق دعم بشري يستقبل تذاكر دعم في هذه النسخة — لكن أي ملاحظة أو خطأ تلقاه، تواصل معي عبر زر "ملاحظات" الأخضر الموجود بأعلى كل شاشة في التطبيق.</p>
                       <p><strong className="text-emerald-400">أين بياناتي؟ هل هي آمنة؟</strong> راجع "سياسة الخصوصية والشروط" أعلاه — كل بياناتك محفوظة محلياً فقط على جهازك.</p>
                       <p><strong className="text-emerald-400">كيف أحتفظ بنسخة من بياناتي أو أنقلها لجهاز آخر؟</strong> استخدم "تصدير البيانات" في قسم "صيانة البيانات والنسخ الاحتياطي" أدناه، ثم "استيراد البيانات" على الجهاز الآخر.</p>
                       <p><strong className="text-emerald-400">كيف أبدأ من جديد؟</strong> لا يوجد حالياً زر "إعادة تعيين" داخل التطبيق نفسه. لحذف كل بياناتك المحلية نهائياً، امسح بيانات هذا الموقع من إعدادات متصفحك (Site Data / Clear Browsing Data لهذا الرابط تحديداً).</p>
@@ -2592,7 +2592,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                   ) : (
                     <>
                       <p><strong className="text-emerald-400">About this app:</strong> SafeSpend is a demo simulator for personal expense management, running entirely on your device with no server, account, or internet connection required.</p>
-                      <p><strong className="text-emerald-400">No live support team right now:</strong> Since this is a fully local demo, there's no human support team receiving messages or tickets in this build — this section documents answers to the most common questions instead.</p>
+                      <p><strong className="text-emerald-400">No official support team yet:</strong> Since this is a fully local demo, there's no human support team receiving tickets in this build — but for any feedback or bug, use the green "Feedback" button at the top of every screen in the app.</p>
                       <p><strong className="text-emerald-400">Where is my data? Is it safe?</strong> See "Terms & Privacy Agreement" above — all your data is stored locally on your device only.</p>
                       <p><strong className="text-emerald-400">How do I back up my data or move it to another device?</strong> Use "Export Data" in the "Data Maintenance & Backup" section below, then "Import Data" on the other device.</p>
                       <p><strong className="text-emerald-400">How do I start fresh?</strong> There is currently no "Reset" button inside the app itself. To permanently delete all your local data, clear this site's data from your browser settings (Site Data / Clear Browsing Data for this specific URL).</p>

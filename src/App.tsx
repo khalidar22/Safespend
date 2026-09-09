@@ -803,11 +803,13 @@ export default function App() {
                 {/* Persistent, always-visible reminder that this build is a
                     trial/prototype — requested explicitly so friends testing
                     it never lose sight of that, without relying on them
-                    having read the one-time welcome notice. Small and
-                    muted-amber to match the app's existing "demo" badges
-                    elsewhere, so it doesn't clash with the emerald branding. */}
-                <span className="text-[6.5px] font-bold px-1.5 py-0.5 rounded-full border border-amber-500/40 text-amber-400 bg-amber-500/10 uppercase tracking-wide leading-none">
-                  {isAr ? "تجريبي" : "Demo"}
+                    having read the one-time welcome notice. Sized and
+                    colored (solid amber fill, bold dark text) to be clearly
+                    legible at a glance rather than blend into the status
+                    bar — per explicit feedback that the first version was
+                    too small to actually notice. */}
+                <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500 text-[#1a1200] uppercase tracking-wide leading-none shadow-sm">
+                  {isAr ? "تجريبي" : "DEMO"}
                 </span>
               </div>
             </div>
@@ -837,8 +839,31 @@ export default function App() {
                 {isAr ? POSTER_SCREENS.find(s => s.id === activeScreen)?.labelAr : POSTER_SCREENS.find(s => s.id === activeScreen)?.labelEn}
               </div>
 
-              {/* Empty balanced element to keep the title centered */}
-              <div className="w-[82px] shrink-0" />
+              {/* PRELAUNCH-REVIEW: this "Feedback" WhatsApp link is deliberately
+                  placed here — the one persistent header rendered on every
+                  single screen, unlike the Help Center which needs
+                  navigation — so it stays obvious and one-tap the whole time
+                  a friend is testing the app. Remove this button (and the
+                  number) before any real/public launch — see the
+                  safespend_prelaunch_text_checklist doc. It also replaces
+                  the previous empty spacer, so it keeps the screen title
+                  visually centered. */}
+              <a
+                href={`https://wa.me/966564917311?text=${encodeURIComponent(
+                  isAr
+                    ? 'مرحباً خالد، عندي ملاحظة على تطبيق SafeSpend التجريبي: '
+                    : 'Hi Khalid, I have some feedback on the SafeSpend prototype: '
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`flex items-center gap-1 px-2.5 py-1.5 bg-[#25D366]/15 border border-[#25D366]/60 hover:bg-[#25D366]/25 rounded-xl text-[#25D366] transition-all cursor-pointer font-bold ${isAr ? 'flex-row-reverse' : 'flex-row'}`}
+                title={isAr ? "أرسل ملاحظاتك" : "Send feedback"}
+              >
+                <MessageCircle size={12} className="stroke-[2.5]" />
+                <span className="text-[9px] font-extrabold whitespace-nowrap">
+                  {isAr ? "ملاحظات" : "Feedback"}
+                </span>
+              </a>
             </div>
 
             {/* ROUTER: Render currently active screen layout inside smartphone */}
