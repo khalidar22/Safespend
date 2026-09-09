@@ -2581,7 +2581,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                       <p><strong className="text-emerald-400">لا يوجد فريق دعم حي حالياً:</strong> بما أن هذا وضع تجريبي محلي بالكامل، لا يوجد فريق دعم بشري يستقبل رسائل أو تذاكر دعم في هذه النسخة — هذا القسم يوثّق الإجابات على الأسئلة الأكثر شيوعاً بدلاً من ذلك.</p>
                       <p><strong className="text-emerald-400">أين بياناتي؟ هل هي آمنة؟</strong> راجع "سياسة الخصوصية والشروط" أعلاه — كل بياناتك محفوظة محلياً فقط على جهازك.</p>
                       <p><strong className="text-emerald-400">كيف أحتفظ بنسخة من بياناتي أو أنقلها لجهاز آخر؟</strong> استخدم "تصدير البيانات" في قسم "صيانة البيانات والنسخ الاحتياطي" أدناه، ثم "استيراد البيانات" على الجهاز الآخر.</p>
-                      <p><strong className="text-emerald-400">كيف أبدأ من جديد؟</strong> استخدم "إعادة تعيين البيانات" في نفس القسم — هذا يحذف كل بياناتك المحلية نهائياً.</p>
+                      <p><strong className="text-emerald-400">كيف أبدأ من جديد؟</strong> لا يوجد حالياً زر "إعادة تعيين" داخل التطبيق نفسه. لحذف كل بياناتك المحلية نهائياً، امسح بيانات هذا الموقع من إعدادات متصفحك (Site Data / Clear Browsing Data لهذا الرابط تحديداً).</p>
                       <p className="text-slate-500 text-[10px]">آخر تحديث: سبتمبر 2026.</p>
                     </>
                   ) : (
@@ -2590,7 +2590,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                       <p><strong className="text-emerald-400">No live support team right now:</strong> Since this is a fully local demo, there's no human support team receiving messages or tickets in this build — this section documents answers to the most common questions instead.</p>
                       <p><strong className="text-emerald-400">Where is my data? Is it safe?</strong> See "Terms & Privacy Agreement" above — all your data is stored locally on your device only.</p>
                       <p><strong className="text-emerald-400">How do I back up my data or move it to another device?</strong> Use "Export Data" in the "Data Maintenance & Backup" section below, then "Import Data" on the other device.</p>
-                      <p><strong className="text-emerald-400">How do I start fresh?</strong> Use "Reset Data" in the same section — this permanently deletes all your local data.</p>
+                      <p><strong className="text-emerald-400">How do I start fresh?</strong> There is currently no "Reset" button inside the app itself. To permanently delete all your local data, clear this site's data from your browser settings (Site Data / Clear Browsing Data for this specific URL).</p>
                       <p className="text-slate-500 text-[10px]">Last updated: September 2026.</p>
                     </>
                   )}
@@ -2619,7 +2619,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                     <>
                       <p><strong className="text-emerald-400">أين تُحفظ بياناتك:</strong> جميع بياناتك (المعاملات، الميزانيات، الأهداف، الأقساط) تُخزَّن محلياً فقط على جهازك (localStorage)، ولا تُرسَل أو تُخزَّن على أي خادم خارجي. هذا وضع تجريبي/محاكاة (Simulator) لا يتطلب حساباً أو اتصالاً بالإنترنت لعمله.</p>
                       <p><strong className="text-emerald-400">المشاركة مع أطراف ثالثة:</strong> لا تُشارك بياناتك مع أي طرف ثالث، ولا تُستخدم لأي غرض تسويقي، لأنها لا تغادر جهازك أصلاً.</p>
-                      <p><strong className="text-emerald-400">حذف بياناتك:</strong> يمكنك حذف كل بياناتك بالكامل في أي وقت من "صيانة البيانات" أدناه (إعادة التعيين)، أو بمسح بيانات الموقع من إعدادات متصفحك.</p>
+                      <p><strong className="text-emerald-400">حذف بياناتك:</strong> يمكنك حذف كل بياناتك بالكامل في أي وقت بمسح بيانات هذا الموقع من إعدادات متصفحك (لا يوجد حالياً زر "إعادة تعيين" داخل التطبيق نفسه).</p>
                       <p><strong className="text-emerald-400">حقوقك بموجب نظام حماية البيانات الشخصية السعودي (PDPL):</strong> لديك الحق الكامل بالوصول لبياناتك (عبر "تصدير البيانات")، وتصحيحها، وحذفها — وبما أن التخزين محلي بالكامل، هذه الحقوق متاحة لك مباشرة وفورياً بلا حاجة لطلب من أي جهة.</p>
                       <p className="text-slate-500 text-[10px]">آخر تحديث: سبتمبر 2026.</p>
                     </>
@@ -2627,7 +2627,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                     <>
                       <p><strong className="text-emerald-400">Where your data lives:</strong> All your data (transactions, budgets, goals, installments) is stored locally on your device only (localStorage). Nothing is sent to or stored on any external server. This is a simulator that needs no account or internet connection to function.</p>
                       <p><strong className="text-emerald-400">Third-party sharing:</strong> Your data is never shared with any third party and is never used for marketing, because it never leaves your device.</p>
-                      <p><strong className="text-emerald-400">Deleting your data:</strong> You can delete all your data at any time from "Data Maintenance" below (Reset), or by clearing this site's data in your browser settings.</p>
+                      <p><strong className="text-emerald-400">Deleting your data:</strong> You can delete all your data at any time by clearing this site's data in your browser settings (there is currently no "Reset" button inside the app itself).</p>
                       <p><strong className="text-emerald-400">Your rights under Saudi PDPL:</strong> You have full rights to access your data (via "Export Data"), correct it, and delete it — and since storage is fully local, these rights are immediately available to you without needing to request anything from anyone.</p>
                       <p className="text-slate-500 text-[10px]">Last updated: September 2026.</p>
                     </>
