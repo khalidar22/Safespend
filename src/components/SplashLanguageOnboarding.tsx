@@ -125,6 +125,11 @@ export const SplashLanguageOnboarding: React.FC<SplashLanguageOnboardingProps> =
               already used at full opacity elsewhere in this file (e.g. the
               step label further down), which reads clearly against the
               same background while staying visually secondary/muted. */}
+          {/* PRELAUNCH-REVIEW: this "Demo" badge describes the app's overall
+              maturity state (not a specific unbuilt feature) and will NOT
+              auto-update. Before any real/public launch, search the codebase
+              for "PRELAUNCH-REVIEW" and update every match — see the
+              safespend_prelaunch_text_checklist doc for the full list. */}
           <div className="text-[10px] text-emerald-500 font-medium">
             SafeSpend V1.4.0 • Android App Demo
           </div>

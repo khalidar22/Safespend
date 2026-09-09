@@ -2575,6 +2575,11 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                   {isAr ? "مركز الدعم والمساعدة" : "SafeSpend Help Center"}
                 </h3>
                 <div className="text-[11px] text-slate-300 leading-relaxed flex flex-col gap-3">
+                  {/* PRELAUNCH-REVIEW: this whole Help modal describes the
+                      app's overall demo/no-support-team state and will NOT
+                      auto-update. Before any real/public launch, search the
+                      codebase for "PRELAUNCH-REVIEW" and update every match —
+                      see the safespend_prelaunch_text_checklist doc. */}
                   {isAr ? (
                     <>
                       <p><strong className="text-emerald-400">عن هذا التطبيق:</strong> SafeSpend نسخة محاكاة تجريبية (Simulator) لإدارة المصروفات الشخصية، تعمل بالكامل على جهازك بلا خادم أو حساب أو اتصال إنترنت مطلوب لعملها.</p>
@@ -2615,6 +2620,11 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                   {isAr ? "سياسة الخصوصية والشروط" : "Privacy Policy & Terms"}
                 </h3>
                 <div className="text-[11px] text-slate-300 leading-relaxed flex flex-col gap-3">
+                  {/* PRELAUNCH-REVIEW: "simulator / no server" phrasing below
+                      describes the app's overall state and will NOT
+                      auto-update. Before any real/public launch, search the
+                      codebase for "PRELAUNCH-REVIEW" and update every match —
+                      see the safespend_prelaunch_text_checklist doc. */}
                   {isAr ? (
                     <>
                       <p><strong className="text-emerald-400">أين تُحفظ بياناتك:</strong> جميع بياناتك (المعاملات، الميزانيات، الأهداف، الأقساط) تُخزَّن محلياً فقط على جهازك (localStorage)، ولا تُرسَل أو تُخزَّن على أي خادم خارجي. هذا وضع تجريبي/محاكاة (Simulator) لا يتطلب حساباً أو اتصالاً بالإنترنت لعمله.</p>
