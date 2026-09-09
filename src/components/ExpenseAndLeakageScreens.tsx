@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, 
   ArrowLeft, 
@@ -414,6 +414,65 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
           : <span className="text-[15px] leading-none">{iconName}</span>;
     }
   };
+
+  // M50 fix: this used to live inline inside the `screenId === 'leakage'`
+  // block below as `boxesWithLimit.map(b => monthExpenses.filter(...))` --
+  // an O(boxes * transactions) nested loop that re-ran on every single
+  // render of this component (any state change anywhere in the app that
+  // re-renders this component, not just navigating to/from the Leakage
+  // screen), even though its result only ever depends on transactions,
+  // savingBoxes and salaryDay. Moved to an unconditional useMemo (must sit
+  // before any of the `if (screenId === ...) return` branches below, per
+  // the Rules of Hooks) so it: (a) only recomputes when those 3 inputs
+  // actually change, and (b) does a single O(transactions + boxes) pass
+  // instead of re-scanning the full transaction list once per category.
+  // Matching semantics are preserved exactly from the original per-box
+  // independent filter (a transaction with no boxId can still count toward
+  // more than one box if its category names happen to collide across
+  // boxes -- an existing, unrelated data-quality edge case, not something
+  // this performance fix changes).
+  const leakStats = useMemo(() => {
+    const { cycleStart, cycleEnd } = getCycleBounds(salaryDay);
+    const boxesWithLimit = (savingBoxes || []).filter(b => b.limit > 0);
+    if (boxesWithLimit.length === 0) return [];
+
+    const boxesByTitleAr = new Map<string, SavingBox[]>();
+    const boxesByTitleEn = new Map<string, SavingBox[]>();
+    for (const b of boxesWithLimit) {
+      if (!boxesByTitleAr.has(b.titleAr)) boxesByTitleAr.set(b.titleAr, []);
+      boxesByTitleAr.get(b.titleAr)!.push(b);
+      if (!boxesByTitleEn.has(b.titleEn)) boxesByTitleEn.set(b.titleEn, []);
+      boxesByTitleEn.get(b.titleEn)!.push(b);
+    }
+
+    const spentByBoxId = new Map<string, number>();
+    for (const t of transactions) {
+      if (t.type !== 'expense') continue;
+      const d = parseLocalDateOnly(t.date);
+      if (d < cycleStart || d >= cycleEnd) continue;
+
+      if (t.boxId) {
+        spentByBoxId.set(t.boxId, (spentByBoxId.get(t.boxId) || 0) + t.amount);
+        continue;
+      }
+      // No boxId (legacy transaction): match by name, same OR-across-both-
+      // fields semantics as the original per-box filter, deduped so a
+      // single box is only credited once even if both its titles match.
+      const matched = new Set<SavingBox>([
+        ...(boxesByTitleAr.get(t.categoryAr) || []),
+        ...(boxesByTitleEn.get(t.categoryEn) || []),
+      ]);
+      matched.forEach(b => {
+        spentByBoxId.set(b.id, (spentByBoxId.get(b.id) || 0) + t.amount);
+      });
+    }
+
+    return boxesWithLimit.map(b => {
+      const spent = spentByBoxId.get(b.id) || 0;
+      return { box: b, spent, percent: Math.round((spent / b.limit) * 100) };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactions, savingBoxes, salaryDay]);
 
   // Screen 8: Savings Boxes / Envelopes
   if (screenId === 'boxes') {
@@ -1378,6 +1437,12 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
   // Screen 12: Leakage detector
   if (screenId === 'leakage') {
     // 1. Find the top leaking category (highest spend relative to its own limit) - current month only
+    // M50 fix: leakStats itself now comes from the memoized, single-pass
+    // computation above (before the first `if (screenId === ...)` branch)
+    // instead of being recomputed here with a nested per-box loop on every
+    // render. monthExpenses is still computed locally since it's only
+    // needed for the hasNoData empty-state check just below, and is cheap
+    // on its own (single O(n) filter, not the O(boxes*n) nested part).
     const { cycleStart: leak_cycleStart, cycleEnd: leak_cycleEnd } = getCycleBounds(salaryDay);
     const monthExpenses = transactions.filter(t => {
       if (t.type !== 'expense') return false;
@@ -1389,15 +1454,8 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
       const d = parseLocalDateOnly(t.date);
       return d >= leak_cycleStart && d < leak_cycleEnd;
     });
-    const boxesWithLimit = (savingBoxes || []).filter(b => b.limit > 0);
-    const leakStats = boxesWithLimit.map(b => {
-      const spent = monthExpenses
-        .filter(t => t.boxId ? t.boxId === b.id : (t.categoryAr === b.titleAr || t.categoryEn === b.titleEn))
-        .reduce((sum, t) => sum + t.amount, 0);
-      return { box: b, spent, percent: Math.round((spent / b.limit) * 100) };
-    });
     const topLeak = leakStats.filter(s => s.spent > 0).sort((a, b) => b.percent - a.percent)[0] || null;
-    const hasLimits = boxesWithLimit.length > 0;
+    const hasLimits = leakStats.length > 0;
     const totalRestaurantSpent = topLeak ? topLeak.spent : 0;
 
     // Active commitments only (respects the 'active' field, previously ignored)

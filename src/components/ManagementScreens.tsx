@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   ArrowLeft, 
   ArrowRight, 
@@ -189,6 +189,25 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   // actual, real policy content, matching how the app genuinely handles data today
   // (100% local-only storage, confirmed by grep: no fetch/axios/network calls in src).
   const [showPrivacyModal, setShowPrivacyModal] = useState<boolean>(false);
+  // M52 fix: same problem as C13 above, on the row right next to it --
+  // "SafeSpend Help Center" was also a plain, non-interactive <div> with no
+  // onClick and no content behind it anywhere in the app. This modal gives
+  // it real, honest content: since this is a local-only simulator with no
+  // backend, there is no live support team to route the user to -- so
+  // instead of faking a "contact us" flow that goes nowhere, it explains
+  // what the app is, links the behavior questions to where they're actually
+  // answered (the Privacy modal, Data Maintenance section), and says so
+  // plainly rather than pretending real support exists.
+  const [showHelpModal, setShowHelpModal] = useState<boolean>(false);
+  // M53 fix: "Export Data" used to download the raw localStorage JSON
+  // (full transaction history, balances, goals) with a single click and no
+  // warning at all -- the resulting file is plain, unencrypted JSON that
+  // opens in any text editor. This doesn't change what gets exported (the
+  // data genuinely needs to be portable for backup/transfer, and it's the
+  // user's own data), but it now tells the user what they're about to get
+  // and what to be careful with (don't share/upload it, don't leave it in
+  // a shared/cloud-synced folder) before the download actually starts.
+  const [showExportWarning, setShowExportWarning] = useState<boolean>(false);
 
   const handleStartAddInstallment = () => {
     setEditingInstallmentId(null);
@@ -671,6 +690,167 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     setGoalTargetError(null);
     setShowAddGoal(true);
   };
+
+  // M51 fix: this whole aggregation (cycle filtering, weekly sums, category
+  // totals/sort, peak-week detection) used to live inline inside the
+  // `screenId === 'reports'` branch far below, which meant it ran again on
+  // EVERY render of this component -- not just when the user is actually
+  // looking at the Reports screen, and not just when the underlying data
+  // changed, but on any unrelated re-render (e.g. typing in a field on a
+  // totally different screen that happens to share this same component).
+  // Moved to an unconditional useMemo -- must sit before the first
+  // `if (screenId === ...) return` below, per the Rules of Hooks -- so it
+  // only recomputes when one of its real inputs actually changes. The
+  // reports block below now just destructures this memoized result instead
+  // of recomputing it.
+  const reportsData = useMemo(() => {
+    const { cycleStart: rep_cycleStart, cycleEnd: rep_cycleEnd } = getCycleBounds(salaryDay, reportsCyclesAgo);
+    const currentMonthExpenses = (transactions || []).filter(t => {
+      if (t.type !== 'expense') return false;
+      const tDate = new Date(t.date);
+      return tDate >= rep_cycleStart && tDate < rep_cycleEnd;
+    });
+
+    const arabicMonths = [
+      'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+    ];
+    const englishMonths = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const fmtCycleDate = (d: Date) => {
+      const mName = isAr ? arabicMonths[d.getMonth()] : englishMonths[d.getMonth()];
+      return `${d.getDate()} ${mName}`;
+    };
+    const cycleEndDisplay = new Date(rep_cycleEnd.getTime() - 86400000); // inclusive last day
+    const cycleLabelAr = reportsCyclesAgo === 0 ? "الدورة الحالية" : "الدورة السابقة";
+    const cycleLabelEn = reportsCyclesAgo === 0 ? "Current Cycle" : "Previous Cycle";
+    const curMonthYearStr = isAr
+      ? `${cycleLabelAr} (${fmtCycleDate(rep_cycleStart)} – ${fmtCycleDate(cycleEndDisplay)})`
+      : `${cycleLabelEn} (${fmtCycleDate(rep_cycleStart)} – ${fmtCycleDate(cycleEndDisplay)})`;
+
+    let w1Sum = 0;
+    let w2Sum = 0;
+    let w3Sum = 0;
+    let w4Sum = 0;
+
+    currentMonthExpenses.forEach(t => {
+      const dayInCycle = Math.floor((new Date(t.date).getTime() - rep_cycleStart.getTime()) / 86400000) + 1;
+      if (dayInCycle <= 7) w1Sum += t.amount;
+      else if (dayInCycle <= 14) w2Sum += t.amount;
+      else if (dayInCycle <= 21) w3Sum += t.amount;
+      else w4Sum += t.amount;
+    });
+
+    const totalMonthSpent = sumAmounts(currentMonthExpenses);
+    // M13 fix: totalMonthSpent is a running float sum. Comparing it to exactly
+    // 0 with `===` means one sub-cent transaction (or float drift from many
+    // small additions) could leave a value like 0.004 that's not === 0 but
+    // rounds to "0.00" in every displayed money figure — the empty state
+    // would then wrongly stay hidden while every number on screen reads
+    // zero. Round to the cent (the app's real money precision) before
+    // deciding whether the month is empty.
+    const isMonthEffectivelyEmpty = Math.round(totalMonthSpent * 100) / 100 <= 0;
+
+    const maxWeekSum = Math.max(w1Sum, w2Sum, w3Sum, w4Sum, 1);
+
+    // Percent heights for the W1-W4 columns
+    const w1Percent = (w1Sum / maxWeekSum) * 100;
+    const w2Percent = (w2Sum / maxWeekSum) * 100;
+    const w3Percent = (w3Sum / maxWeekSum) * 100;
+    const w4Percent = (w4Sum / maxWeekSum) * 100;
+
+    // Category Shares
+    const categoryTotals: { [key: string]: { amount: number, titleAr: string, titleEn: string, color: string, limit: number } } = {};
+
+    // Pre-populate with our standard savingBoxes
+    (savingBoxes || []).forEach(box => {
+      categoryTotals[box.titleEn] = {
+        amount: 0,
+        titleAr: box.titleAr,
+        titleEn: box.titleEn,
+        color: box.color,
+        limit: box.limit
+      };
+    });
+
+    // Add transaction amounts
+    currentMonthExpenses.forEach(t => {
+      const catKey = t.categoryEn || 'Other';
+      if (categoryTotals[catKey]) {
+        categoryTotals[catKey].amount += t.amount;
+      } else {
+        categoryTotals[catKey] = {
+          amount: t.amount,
+          titleAr: t.categoryAr || t.categoryEn || 'أخرى',
+          titleEn: catKey,
+          color: '#10b981',
+          limit: 0
+        };
+      }
+    });
+
+    const sortedCategories = Object.values(categoryTotals)
+      .filter(c => c.amount > 0)
+      .sort((a, b) => {
+        const aPct = a.limit > 0 ? a.amount / a.limit : -1;
+        const bPct = b.limit > 0 ? b.amount / b.limit : -1;
+        // M37 fix: categories with no limit set both got aPct/bPct = -1, so
+        // any two no-limit categories (or any genuine percentage tie) were
+        // left in whatever order Object.values() happened to produce --
+        // not wrong exactly, but not meaningful either, and it could look
+        // like the list order was arbitrary/unstable to the user. Break
+        // ties by actual amount spent (descending) so the ordering always
+        // reflects something real.
+        if (bPct !== aPct) return bPct - aPct;
+        return b.amount - a.amount;
+      });
+
+    // M12 fix: weeks 1-3 are always a fixed 7 days each (days 1-7, 8-14,
+    // 15-21), but week 4 absorbs whatever is LEFT in the cycle -- and salary
+    // cycles run roughly 28-31 days (see getCycleBounds), so week 4 is
+    // usually 8-10 days long (sometimes as few as 6-7). Comparing raw sums
+    // directly is unfair: a week with more days will tend to accumulate a
+    // bigger total even at the exact same daily spending rate, so "peak
+    // week" was structurally biased toward whichever week happens to be
+    // longest -- almost always week 4 -- regardless of actual spending
+    // behavior. Comparing average spend PER DAY within each week removes
+    // that length bias; the displayed total for the winning week is still
+    // its real total, just no longer used to pick the winner.
+    const cycleLengthDays = Math.max(1, Math.round((rep_cycleEnd.getTime() - rep_cycleStart.getTime()) / 86400000));
+    const week4Days = Math.max(1, cycleLengthDays - 21);
+    const w1Avg = w1Sum / 7;
+    const w2Avg = w2Sum / 7;
+    const w3Avg = w3Sum / 7;
+    const w4Avg = w4Sum / week4Days;
+
+    let maxWeekNum = 1;
+    let maxWeekAvg = w1Avg;
+    let maxWeekVal = w1Sum;
+    if (w2Avg > maxWeekAvg) { maxWeekNum = 2; maxWeekAvg = w2Avg; maxWeekVal = w2Sum; }
+    if (w3Avg > maxWeekAvg) { maxWeekNum = 3; maxWeekAvg = w3Avg; maxWeekVal = w3Sum; }
+    if (w4Avg > maxWeekAvg) { maxWeekNum = 4; maxWeekAvg = w4Avg; maxWeekVal = w4Sum; }
+
+    const peakDescAr = maxWeekVal > 0
+      ? `الإنفاق الأكبر تركز في الأسبوع ${maxWeekNum === 1 ? 'الأول' : maxWeekNum === 2 ? 'الثاني' : maxWeekNum === 3 ? 'الثالث' : 'الرابع'} بمجموع ${showBalances ? formatMoney(maxWeekVal, lang, currency) : '•••'}.`
+      : `لا يوجد أي إنفاق مسجل هذا الشهر حتى الآن.`;
+
+    const peakDescEn = maxWeekVal > 0
+      ? `Peak spending noticed during Week ${maxWeekNum} with a total of ${showBalances ? formatMoney(maxWeekVal, lang, currency) : '•••'}.`
+      : `No transactions logged this month yet.`;
+
+    return {
+      curMonthYearStr,
+      isMonthEffectivelyEmpty,
+      w1Sum, w2Sum, w3Sum, w4Sum,
+      w1Percent, w2Percent, w3Percent, w4Percent,
+      sortedCategories,
+      peakDescAr,
+      peakDescEn,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactions, savingBoxes, salaryDay, reportsCyclesAgo, isAr, lang, currency, showBalances]);
 
   // Screen 13: Upcoming Commitments list
   if (screenId === 'upcoming') {
@@ -1397,141 +1577,18 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
 
   // Screen 16: Reports & Analytics
   if (screenId === 'reports') {
-    const { cycleStart: rep_cycleStart, cycleEnd: rep_cycleEnd } = getCycleBounds(salaryDay, reportsCyclesAgo);
-    const currentMonthExpenses = (transactions || []).filter(t => {
-      if (t.type !== 'expense') return false;
-      const tDate = new Date(t.date);
-      return tDate >= rep_cycleStart && tDate < rep_cycleEnd;
-    });
-
-    const arabicMonths = [
-      'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
-      'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
-    ];
-    const englishMonths = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    const fmtCycleDate = (d: Date) => {
-      const mName = isAr ? arabicMonths[d.getMonth()] : englishMonths[d.getMonth()];
-      return `${d.getDate()} ${mName}`;
-    };
-    const cycleEndDisplay = new Date(rep_cycleEnd.getTime() - 86400000); // inclusive last day
-    const cycleLabelAr = reportsCyclesAgo === 0 ? "الدورة الحالية" : "الدورة السابقة";
-    const cycleLabelEn = reportsCyclesAgo === 0 ? "Current Cycle" : "Previous Cycle";
-    const curMonthYearStr = isAr
-      ? `${cycleLabelAr} (${fmtCycleDate(rep_cycleStart)} – ${fmtCycleDate(cycleEndDisplay)})`
-      : `${cycleLabelEn} (${fmtCycleDate(rep_cycleStart)} – ${fmtCycleDate(cycleEndDisplay)})`;
-
-    let w1Sum = 0;
-    let w2Sum = 0;
-    let w3Sum = 0;
-    let w4Sum = 0;
-
-    currentMonthExpenses.forEach(t => {
-      const dayInCycle = Math.floor((new Date(t.date).getTime() - rep_cycleStart.getTime()) / 86400000) + 1;
-      if (dayInCycle <= 7) w1Sum += t.amount;
-      else if (dayInCycle <= 14) w2Sum += t.amount;
-      else if (dayInCycle <= 21) w3Sum += t.amount;
-      else w4Sum += t.amount;
-    });
-
-    const totalMonthSpent = sumAmounts(currentMonthExpenses);
-    // M13 fix: totalMonthSpent is a running float sum. Comparing it to exactly
-    // 0 with `===` means one sub-cent transaction (or float drift from many
-    // small additions) could leave a value like 0.004 that's not === 0 but
-    // rounds to "0.00" in every displayed money figure — the empty state
-    // would then wrongly stay hidden while every number on screen reads
-    // zero. Round to the cent (the app's real money precision) before
-    // deciding whether the month is empty.
-    const isMonthEffectivelyEmpty = Math.round(totalMonthSpent * 100) / 100 <= 0;
-
-    const maxWeekSum = Math.max(w1Sum, w2Sum, w3Sum, w4Sum, 1);
-    
-    // Percent heights for the W1-W4 columns
-    const w1Percent = (w1Sum / maxWeekSum) * 100;
-    const w2Percent = (w2Sum / maxWeekSum) * 100;
-    const w3Percent = (w3Sum / maxWeekSum) * 100;
-    const w4Percent = (w4Sum / maxWeekSum) * 100;
-
-    // Category Shares
-    const categoryTotals: { [key: string]: { amount: number, titleAr: string, titleEn: string, color: string, limit: number } } = {};
-    
-    // Pre-populate with our standard savingBoxes
-    (savingBoxes || []).forEach(box => {
-      categoryTotals[box.titleEn] = {
-        amount: 0,
-        titleAr: box.titleAr,
-        titleEn: box.titleEn,
-        color: box.color,
-        limit: box.limit
-      };
-    });
-
-    // Add transaction amounts
-    currentMonthExpenses.forEach(t => {
-      const catKey = t.categoryEn || 'Other';
-      if (categoryTotals[catKey]) {
-        categoryTotals[catKey].amount += t.amount;
-      } else {
-        categoryTotals[catKey] = {
-          amount: t.amount,
-          titleAr: t.categoryAr || t.categoryEn || 'أخرى',
-          titleEn: catKey,
-          color: '#10b981',
-          limit: 0
-        };
-      }
-    });
-
-    const sortedCategories = Object.values(categoryTotals)
-      .filter(c => c.amount > 0)
-      .sort((a, b) => {
-        const aPct = a.limit > 0 ? a.amount / a.limit : -1;
-        const bPct = b.limit > 0 ? b.amount / b.limit : -1;
-        // M37 fix: categories with no limit set both got aPct/bPct = -1, so
-        // any two no-limit categories (or any genuine percentage tie) were
-        // left in whatever order Object.values() happened to produce --
-        // not wrong exactly, but not meaningful either, and it could look
-        // like the list order was arbitrary/unstable to the user. Break
-        // ties by actual amount spent (descending) so the ordering always
-        // reflects something real.
-        if (bPct !== aPct) return bPct - aPct;
-        return b.amount - a.amount;
-      });
-
-    // M12 fix: weeks 1-3 are always a fixed 7 days each (days 1-7, 8-14,
-    // 15-21), but week 4 absorbs whatever is LEFT in the cycle -- and salary
-    // cycles run roughly 28-31 days (see getCycleBounds), so week 4 is
-    // usually 8-10 days long (sometimes as few as 6-7). Comparing raw sums
-    // directly is unfair: a week with more days will tend to accumulate a
-    // bigger total even at the exact same daily spending rate, so "peak
-    // week" was structurally biased toward whichever week happens to be
-    // longest -- almost always week 4 -- regardless of actual spending
-    // behavior. Comparing average spend PER DAY within each week removes
-    // that length bias; the displayed total for the winning week is still
-    // its real total, just no longer used to pick the winner.
-    const cycleLengthDays = Math.max(1, Math.round((rep_cycleEnd.getTime() - rep_cycleStart.getTime()) / 86400000));
-    const week4Days = Math.max(1, cycleLengthDays - 21);
-    const w1Avg = w1Sum / 7;
-    const w2Avg = w2Sum / 7;
-    const w3Avg = w3Sum / 7;
-    const w4Avg = w4Sum / week4Days;
-
-    let maxWeekNum = 1;
-    let maxWeekAvg = w1Avg;
-    let maxWeekVal = w1Sum;
-    if (w2Avg > maxWeekAvg) { maxWeekNum = 2; maxWeekAvg = w2Avg; maxWeekVal = w2Sum; }
-    if (w3Avg > maxWeekAvg) { maxWeekNum = 3; maxWeekAvg = w3Avg; maxWeekVal = w3Sum; }
-    if (w4Avg > maxWeekAvg) { maxWeekNum = 4; maxWeekAvg = w4Avg; maxWeekVal = w4Sum; }
-
-    const peakDescAr = maxWeekVal > 0 
-      ? `الإنفاق الأكبر تركز في الأسبوع ${maxWeekNum === 1 ? 'الأول' : maxWeekNum === 2 ? 'الثاني' : maxWeekNum === 3 ? 'الثالث' : 'الرابع'} بمجموع ${showBalances ? formatMoney(maxWeekVal, lang, currency) : '•••'}.`
-      : `لا يوجد أي إنفاق مسجل هذا الشهر حتى الآن.`;
-
-    const peakDescEn = maxWeekVal > 0
-      ? `Peak spending noticed during Week ${maxWeekNum} with a total of ${showBalances ? formatMoney(maxWeekVal, lang, currency) : '•••'}.`
-      : `No transactions logged this month yet.`;
+    // M51 fix: all of this data was previously computed inline here on
+    // every render; it now comes from the `reportsData` useMemo above,
+    // which only recomputes when its real inputs change.
+    const {
+      curMonthYearStr,
+      isMonthEffectivelyEmpty,
+      w1Sum, w2Sum, w3Sum, w4Sum,
+      w1Percent, w2Percent, w3Percent, w4Percent,
+      sortedCategories,
+      peakDescAr,
+      peakDescEn,
+    } = reportsData;
 
     return (
       <div className="flex flex-col h-full bg-[#030d0a] text-slate-100 p-5 overflow-y-auto pb-24" dir={isAr ? 'rtl' : 'ltr'}>
@@ -2491,10 +2548,14 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
           {/* Section 3: SafeSpend Support */}
           <div className="bg-[#051613] rounded-2xl border border-emerald-950 p-4 flex flex-col gap-2.5 text-xs">
             <h4 className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">{isAr ? "الدعم والمساعدة" : "Help & Documentation"}</h4>
-            <div className="flex items-center gap-2 text-slate-300 py-1">
+            <button
+              type="button"
+              onClick={() => setShowHelpModal(true)}
+              className="flex items-center gap-2 text-slate-300 py-1 w-full text-right hover:text-emerald-400 transition-colors cursor-pointer"
+            >
               <HelpCircle size={14} className="text-emerald-500" />
               <span>{isAr ? "مركز الدعم والمساعدة" : "SafeSpend Help Center"}</span>
-            </div>
+            </button>
             <button
               type="button"
               onClick={() => setShowPrivacyModal(true)}
@@ -2504,6 +2565,46 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
               <span>{isAr ? "سياسة الخصوصية والشروط" : "Terms & Privacy Agreement"}</span>
             </button>
           </div>
+
+          {/* M52 fix: real Help Center modal (previously this row did nothing at all) */}
+          {showHelpModal && (
+            <div className="fixed inset-0 bg-[#020b09]/90 z-50 flex items-center justify-center p-4">
+              <div className="bg-[#03110d] rounded-3xl border border-emerald-950/85 p-6 w-full max-w-sm max-h-[80vh] overflow-y-auto flex flex-col gap-4 shadow-2xl" dir={isAr ? 'rtl' : 'ltr'}>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <HelpCircle size={16} className="text-emerald-500" />
+                  {isAr ? "مركز الدعم والمساعدة" : "SafeSpend Help Center"}
+                </h3>
+                <div className="text-[11px] text-slate-300 leading-relaxed flex flex-col gap-3">
+                  {isAr ? (
+                    <>
+                      <p><strong className="text-emerald-400">عن هذا التطبيق:</strong> SafeSpend نسخة محاكاة تجريبية (Simulator) لإدارة المصروفات الشخصية، تعمل بالكامل على جهازك بلا خادم أو حساب أو اتصال إنترنت مطلوب لعملها.</p>
+                      <p><strong className="text-emerald-400">لا يوجد فريق دعم حي حالياً:</strong> بما أن هذا وضع تجريبي محلي بالكامل، لا يوجد فريق دعم بشري يستقبل رسائل أو تذاكر دعم في هذه النسخة — هذا القسم يوثّق الإجابات على الأسئلة الأكثر شيوعاً بدلاً من ذلك.</p>
+                      <p><strong className="text-emerald-400">أين بياناتي؟ هل هي آمنة؟</strong> راجع "سياسة الخصوصية والشروط" أعلاه — كل بياناتك محفوظة محلياً فقط على جهازك.</p>
+                      <p><strong className="text-emerald-400">كيف أحتفظ بنسخة من بياناتي أو أنقلها لجهاز آخر؟</strong> استخدم "تصدير البيانات" في قسم "صيانة البيانات والنسخ الاحتياطي" أدناه، ثم "استيراد البيانات" على الجهاز الآخر.</p>
+                      <p><strong className="text-emerald-400">كيف أبدأ من جديد؟</strong> استخدم "إعادة تعيين البيانات" في نفس القسم — هذا يحذف كل بياناتك المحلية نهائياً.</p>
+                      <p className="text-slate-500 text-[10px]">آخر تحديث: سبتمبر 2026.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p><strong className="text-emerald-400">About this app:</strong> SafeSpend is a demo simulator for personal expense management, running entirely on your device with no server, account, or internet connection required.</p>
+                      <p><strong className="text-emerald-400">No live support team right now:</strong> Since this is a fully local demo, there's no human support team receiving messages or tickets in this build — this section documents answers to the most common questions instead.</p>
+                      <p><strong className="text-emerald-400">Where is my data? Is it safe?</strong> See "Terms & Privacy Agreement" above — all your data is stored locally on your device only.</p>
+                      <p><strong className="text-emerald-400">How do I back up my data or move it to another device?</strong> Use "Export Data" in the "Data Maintenance & Backup" section below, then "Import Data" on the other device.</p>
+                      <p><strong className="text-emerald-400">How do I start fresh?</strong> Use "Reset Data" in the same section — this permanently deletes all your local data.</p>
+                      <p className="text-slate-500 text-[10px]">Last updated: September 2026.</p>
+                    </>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowHelpModal(false)}
+                  className="mt-1 py-2.5 w-full bg-emerald-500 hover:bg-emerald-400 text-[#030d0a] text-xs font-bold rounded-xl transition-all"
+                >
+                  {isAr ? "إغلاق" : "Close"}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* C13: real Privacy & Terms modal (previously this row did nothing at all) */}
           {showPrivacyModal && (
@@ -2548,13 +2649,57 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
             <h4 className="text-[10px] text-rose-500 font-bold uppercase tracking-wider">{isAr ? "صيانة البيانات والنسخ الاحتياطي" : "Data Maintenance & Backup"}</h4>
             
             <div className="grid grid-cols-2 gap-2">
-              <button 
-                onClick={exportData}
+              <button
+                type="button"
+                onClick={() => setShowExportWarning(true)}
                 className="py-2.5 px-3 bg-[#030d0a] border border-emerald-950 text-emerald-400 font-bold rounded-xl flex items-center justify-center gap-1.5 hover:bg-emerald-950/30 cursor-pointer"
               >
                 <Save size={13} />
                 <span>{isAr ? "تصدير البيانات" : "Export Data"}</span>
               </button>
+
+              {/* M53 fix: privacy/security warning shown before the unencrypted
+                  JSON backup actually downloads (previously exportData() ran
+                  immediately on click, with no warning at all). */}
+              {showExportWarning && (
+                <div className="fixed inset-0 bg-[#020b09]/90 z-50 flex items-center justify-center p-4">
+                  <div className="bg-[#03110d] rounded-3xl border border-rose-950/60 p-6 w-full max-w-sm flex flex-col gap-4 shadow-2xl" dir={isAr ? 'rtl' : 'ltr'}>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <AlertTriangle size={16} className="text-rose-400" />
+                      {isAr ? "قبل تصدير بياناتك" : "Before you export your data"}
+                    </h3>
+                    <div className="text-[11px] text-slate-300 leading-relaxed flex flex-col gap-2.5">
+                      {isAr ? (
+                        <>
+                          <p>سيتم تنزيل ملف JSON يحتوي على <strong className="text-rose-300">كل بياناتك المالية</strong> (المعاملات، الأرصدة، الأهداف، الأقساط) على شكل نص عادي <strong className="text-rose-300">غير مشفّر</strong> — أي برنامج أو شخص يفتح هذا الملف يمكنه قراءته مباشرة.</p>
+                          <p>احتفظ به في مكان آمن فقط، ولا تشاركه أو ترفعه لأي مكان لا تثق به (بريد إلكتروني عام، مجلد سحابي مشترك، إلخ).</p>
+                        </>
+                      ) : (
+                        <>
+                          <p>This downloads a JSON file containing <strong className="text-rose-300">all your financial data</strong> (transactions, balances, goals, installments) as <strong className="text-rose-300">plain, unencrypted</strong> text — anyone who opens this file can read it directly.</p>
+                          <p>Keep it somewhere safe, and don't share it or upload it anywhere you don't trust (a public email, a shared cloud folder, etc).</p>
+                        </>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowExportWarning(false)}
+                        className="py-2.5 bg-[#030d0a] border border-emerald-950 text-slate-300 text-xs font-bold rounded-xl hover:bg-emerald-950/30 transition-all"
+                      >
+                        {isAr ? "إلغاء" : "Cancel"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowExportWarning(false); exportData(); }}
+                        className="py-2.5 bg-rose-500 hover:bg-rose-400 text-[#030d0a] text-xs font-bold rounded-xl transition-all"
+                      >
+                        {isAr ? "تصدير الآن" : "Export Anyway"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <label 
                 className="py-2.5 px-3 bg-[#030d0a] border border-emerald-950 text-emerald-400 font-bold rounded-xl flex items-center justify-center gap-1.5 hover:bg-emerald-950/30 cursor-pointer text-center"
