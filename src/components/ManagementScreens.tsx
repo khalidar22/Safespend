@@ -84,6 +84,7 @@ interface ManagementScreensProps {
   setSavingBoxes: React.Dispatch<React.SetStateAction<any[]>>;
   userSalary: number;
   salaryDay: number;
+  onReplayTour: () => void;
 }
 
 export const ManagementScreens: React.FC<ManagementScreensProps> = ({
@@ -126,6 +127,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   setSavingBoxes,
   userSalary,
   salaryDay,
+  onReplayTour,
 }) => {
   const isAr = lang === 'ar';
 
@@ -2555,6 +2557,19 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
             >
               <HelpCircle size={14} className="text-emerald-500" />
               <span>{isAr ? "مركز الدعم والمساعدة" : "SafeSpend Help Center"}</span>
+            </button>
+            {/* Replay entry point for the Coach Marks Dashboard tour — the
+                tour only auto-shows once (localStorage flag in App.tsx), so
+                this is the only way to see it again afterwards. Navigates
+                back to the Dashboard since every tour step anchors to a
+                Dashboard-only element. */}
+            <button
+              type="button"
+              onClick={onReplayTour}
+              className="flex items-center gap-2 text-slate-300 py-1 w-full text-right hover:text-emerald-400 transition-colors cursor-pointer"
+            >
+              <Sparkles size={14} className="text-emerald-500" />
+              <span>{isAr ? "إعادة تشغيل الجولة التعريفية" : "Replay the interactive tour"}</span>
             </button>
             <button
               type="button"

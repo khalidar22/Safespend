@@ -58,6 +58,7 @@ import { formatMoney, computeLiveSpent, getCycleBounds, sumAmounts, todayLocalIS
 
 // Modular Screen Components
 import { DashboardScreen } from './components/DashboardScreen';
+import { CoachMarksTour } from './components/CoachMarksTour';
 import { SplashLanguageOnboarding } from './components/SplashLanguageOnboarding';
 import { FinancialSetup } from './components/FinancialSetup';
 import { ExpenseAndLeakageScreens } from './components/ExpenseAndLeakageScreens';
@@ -174,6 +175,37 @@ export default function App() {
       // ignore — worst case the notice reappears next launch, which is safe
     }
     setShowWelcomeDemoNotice(false);
+  };
+
+  // Coach Marks interactive product tour — auto-shown once the first time a
+  // (first-time or returning) user reaches the Dashboard, same one-time
+  // localStorage-flag pattern as the welcome notice above, but with its own
+  // dedicated key so dismissing one never affects the other. Deliberately
+  // waits for the welcome notice to be dismissed first so the two overlays
+  // never stack. Also replayable anytime via the Help Center (see
+  // ManagementScreens.tsx / replayTour below).
+  const [showTour, setShowTour] = useState<boolean>(false);
+  const dismissTour = () => {
+    try {
+      localStorage.setItem('safespend-tour-seen', '1');
+    } catch {
+      // ignore — worst case the tour reappears next launch, which is safe
+    }
+    setShowTour(false);
+  };
+  useEffect(() => {
+    if (activeScreen !== 'dashboard' || showWelcomeDemoNotice) return;
+    try {
+      if (!localStorage.getItem('safespend-tour-seen')) {
+        setShowTour(true);
+      }
+    } catch {
+      // ignore — if localStorage is unavailable, just skip the auto-tour
+    }
+  }, [activeScreen, showWelcomeDemoNotice]);
+  const replayTour = () => {
+    setActiveScreen('dashboard');
+    setShowTour(true);
   };
 
   // Calculations
@@ -725,7 +757,7 @@ export default function App() {
           </div>
 
           {/* Inner Phone Screen Content */}
-          <div className="flex-1 w-full h-full bg-[#030d0a] rounded-[42px] overflow-hidden flex flex-col relative z-10">
+          <div id="phone-screen-container" className="flex-1 w-full h-full bg-[#030d0a] rounded-[42px] overflow-hidden flex flex-col relative z-10">
 
             {/* PRELAUNCH-REVIEW: this whole welcome notice (including the
                 WhatsApp feedback link and phone number) describes the app's
@@ -788,6 +820,17 @@ export default function App() {
                   </button>
                 </div>
               </div>
+            )}
+
+            {/* Coach Marks interactive tour — only ever shown on the
+                Dashboard (its 5 steps anchor to Dashboard-only elements),
+                and never at the same time as the welcome notice above. */}
+            {showTour && activeScreen === 'dashboard' && !showWelcomeDemoNotice && (
+              <CoachMarksTour
+                isAr={isAr}
+                containerId="phone-screen-container"
+                onFinish={dismissTour}
+              />
             )}
 
             {/* Phone Status Bar (Emulated Top - Cleaned as requested) */}
@@ -1023,6 +1066,7 @@ export default function App() {
                   setSavingBoxes={setSavingBoxes}
                   userSalary={userSalary}
                   salaryDay={salaryDay}
+                  onReplayTour={replayTour}
                 />
               )}
 

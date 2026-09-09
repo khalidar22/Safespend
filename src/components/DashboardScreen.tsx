@@ -269,7 +269,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           actually appears most often per persona (e.g. persona-1 always, and the
           "not enough data yet" states for persona-3/persona-5). See PERSONA_ACCENT
           in mockData.ts to adjust colors or fully remove this experiment. */}
-      <div className="px-4 pt-4">
+      <div className="px-4 pt-4" id="tour-persona-card">
         {(() => {
           const accent = PERSONA_ACCENT[selectedPersona || ''] || PERSONA_ACCENT['persona-1'];
           const cardClass = personaInsight.tone === 'warning'
@@ -306,7 +306,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       </div>
 
       {/* Main Dial Card / Safe Spend Today */}
-      <div className="p-4">
+      <div className="p-4" id="tour-safe-circle">
         <div className="relative rounded-3xl p-6 bg-gradient-to-br from-[#061d19] via-[#041512] to-[#020b09] border border-emerald-500/20 shadow-xl overflow-hidden glow-emerald">
           {/* Background Ambient Glimmer */}
           <div className="absolute -right-16 -top-16 w-36 h-36 bg-emerald-500/10 rounded-full blur-2xl"></div>
@@ -489,6 +489,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       {/* Widget: Leakage Alert */}
       <button
         type="button"
+        id="tour-leak-alert"
         onClick={() => onNavigate('leakage')}
         aria-label={isAr ? `${leakLabelAr}، ${leakCategoryAr}، اضغط لعرض التفاصيل` : `${leakLabelEn}, ${leakCategoryEn}, tap for details`}
         className="p-4 w-full text-start block"
@@ -554,7 +555,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       </button>
 
       {/* Saving Boxes Envelopes Preview */}
-      <div className="px-4 mb-4">
+      <div className="px-4 mb-4" id="tour-categories">
         <div className="flex justify-between items-center mb-2.5">
           <h3 className="text-xs font-bold text-emerald-400/90 uppercase tracking-wide">
             {isAr ? "فئات الإنفاق" : "Spending Categories"}
@@ -632,7 +633,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       </div>
 
       {/* Widget: Upcoming Commitments preview */}
-      <div className="px-4 mb-4">
+      <div className="px-4 mb-4" id="tour-upcoming">
         <div className="bg-[#051613] border border-emerald-950 rounded-2xl p-4">
           <div className="flex justify-between items-center mb-3 pb-2 border-b border-emerald-950/50">
             <span className="text-xs font-bold text-emerald-400/90 uppercase tracking-wide flex items-center gap-1">
