@@ -28,7 +28,8 @@ import {
   Coffee,
   Car,
   ShoppingBag,
-  X
+  X,
+  MessageCircle
 } from 'lucide-react';
 
 // Data and Types
@@ -152,7 +153,29 @@ export default function App() {
   // users and confuses anyone unfamiliar with the term. See Settings.
   const [zakatFeatureEnabled, setZakatFeatureEnabled] = useState<boolean>(savedState?.zakatFeatureEnabled || false);
   const [selectedPersona, setSelectedPersona] = useState<string | null>(savedState?.selectedPersona || 'persona-3'); // Family Style by default
-  
+
+  // One-time "this is a demo/prototype" welcome notice, shown the very first
+  // time the app is opened on a device (e.g. when sent to a friend to test),
+  // regardless of which onboarding screen they land on first. Dismissing it
+  // sets a separate localStorage flag so it never reappears on that device,
+  // even after the user resets their in-app data. Includes a WhatsApp link
+  // so testers can send feedback/bugs with the lowest possible friction.
+  const [showWelcomeDemoNotice, setShowWelcomeDemoNotice] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem('safespend-demo-notice-seen');
+    } catch {
+      return false;
+    }
+  });
+  const dismissWelcomeDemoNotice = () => {
+    try {
+      localStorage.setItem('safespend-demo-notice-seen', '1');
+    } catch {
+      // ignore — worst case the notice reappears next launch, which is safe
+    }
+    setShowWelcomeDemoNotice(false);
+  };
+
   // Calculations
   const [availableToday, setAvailableToday] = useState<number>(0);
   // H15 fix: the "Daily Limit" screen's calculation-breakdown card used to
@@ -703,12 +726,89 @@ export default function App() {
 
           {/* Inner Phone Screen Content */}
           <div className="flex-1 w-full h-full bg-[#030d0a] rounded-[42px] overflow-hidden flex flex-col relative z-10">
-            
+
+            {/* PRELAUNCH-REVIEW: this whole welcome notice (including the
+                WhatsApp feedback link and phone number) describes the app's
+                current prototype/friend-testing state and will NOT
+                auto-update. Before any real/public launch, search the
+                codebase for "PRELAUNCH-REVIEW" and update every match — see
+                the safespend_prelaunch_text_checklist doc. */}
+            {/* One-time "this is a prototype" welcome notice — shown the
+                first time the app is opened on a device, before the user
+                does anything else. Persisted separately from the app's own
+                data (safespend-demo-notice-seen), so resetting in-app data
+                does not bring it back, and dismissing it is permanent for
+                that browser/device. Requested explicitly for friend testing:
+                unmissable up front, not buried in a settings modal. */}
+            {showWelcomeDemoNotice && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center p-4">
+                <div
+                  onClick={dismissWelcomeDemoNotice}
+                  className="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
+                />
+                <div
+                  className="relative bg-[#03110d] rounded-3xl border border-amber-500/40 p-6 w-full max-w-[300px] flex flex-col gap-4 shadow-2xl z-50"
+                  dir={isAr ? 'rtl' : 'ltr'}
+                >
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={18} className="text-amber-400 shrink-0" />
+                    <h3 className="text-sm font-bold text-white">
+                      {isAr ? "قبل ما تبدأ" : "Before you start"}
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    {isAr
+                      ? "SafeSpend نسخة تجريبية (Prototype) لسا قيد التطوير، مو نسخة نهائية جاهزة. كل بياناتك تُخزَّن محلياً على جهازك بس، وما فيه فريق دعم حي حالياً."
+                      : "SafeSpend is a prototype still under development, not a finished, launch-ready product. All your data is stored locally on your device only, and there's no live support team yet."}
+                  </p>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    {isAr
+                      ? "لو لقيت أي خطأ أو عندك ملاحظة، تواصل معي مباشرة — رأيك يساعدني أطوّر التطبيق."
+                      : "If you spot a bug or have feedback, reach out directly — your input helps shape the app."}
+                  </p>
+                  <a
+                    href={`https://wa.me/966564917311?text=${encodeURIComponent(
+                      isAr
+                        ? 'مرحباً خالد، عندي ملاحظة على تطبيق SafeSpend التجريبي: '
+                        : 'Hi Khalid, I have some feedback on the SafeSpend prototype: '
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-1.5 py-2.5 w-full bg-[#25D366] hover:bg-[#20bd5a] text-[#062112] text-xs font-bold rounded-xl transition-all"
+                  >
+                    <MessageCircle size={14} />
+                    {isAr ? "أرسل ملاحظة عبر واتساب" : "Send feedback on WhatsApp"}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={dismissWelcomeDemoNotice}
+                    className="py-2.5 w-full bg-emerald-500 hover:bg-emerald-400 text-[#030d0a] text-xs font-bold rounded-xl transition-all"
+                  >
+                    {isAr ? "فهمت، إبدأ" : "Got it, continue"}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Phone Status Bar (Emulated Top - Cleaned as requested) */}
             <div className="flex justify-between items-center px-6 pt-3 pb-2 text-[10px] font-bold text-slate-400 select-none bg-gradient-to-b from-black/20 to-transparent">
               <div>{currentTime}</div>
-              <div className="text-[9px] uppercase tracking-wider font-extrabold text-emerald-500/80">
-                {isAr ? "الصرف الآمن" : "SafeSpend"}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] uppercase tracking-wider font-extrabold text-emerald-500/80">
+                  {isAr ? "الصرف الآمن" : "SafeSpend"}
+                </span>
+                {/* PRELAUNCH-REVIEW: remove or repurpose this persistent
+                    badge before any real/public launch — see the
+                    safespend_prelaunch_text_checklist doc. */}
+                {/* Persistent, always-visible reminder that this build is a
+                    trial/prototype — requested explicitly so friends testing
+                    it never lose sight of that, without relying on them
+                    having read the one-time welcome notice. Small and
+                    muted-amber to match the app's existing "demo" badges
+                    elsewhere, so it doesn't clash with the emerald branding. */}
+                <span className="text-[6.5px] font-bold px-1.5 py-0.5 rounded-full border border-amber-500/40 text-amber-400 bg-amber-500/10 uppercase tracking-wide leading-none">
+                  {isAr ? "تجريبي" : "Demo"}
+                </span>
               </div>
             </div>
 
