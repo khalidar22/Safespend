@@ -306,16 +306,22 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       </div>
 
       {/* Main Dial Card / Safe Spend Today */}
-      <div className="p-4" id="tour-safe-circle">
+      <div className="p-4">
         <div className="relative rounded-3xl p-6 bg-gradient-to-br from-[#061d19] via-[#041512] to-[#020b09] border border-emerald-500/20 shadow-xl overflow-hidden glow-emerald">
           {/* Background Ambient Glimmer */}
           <div className="absolute -right-16 -top-16 w-36 h-36 bg-emerald-500/10 rounded-full blur-2xl"></div>
-          
+
           <div className="text-center">
+            {/* Tour step 2 anchors just the label+ring+caption group, not the
+                whole card below (which also includes the separate "remaining
+                salary" sub-card) — that group alone can be well over 400px
+                tall, too big to reliably fit a tooltip beside it in a fixed
+                ~700px phone frame without ever overlapping it. */}
+            <div id="tour-safe-circle">
             <span className="text-[11px] font-bold text-emerald-400/80 uppercase tracking-wider bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/10 inline-block">
               {isAr ? "المتاح للإنفاق اليوم" : "Available for Spend Today"}
             </span>
-            
+
             {/* Dynamic Circular Meter Simulator */}
             <div className="relative w-40 h-40 mx-auto mt-4 flex items-center justify-center">
               {/* SVG Ring */}
@@ -397,6 +403,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             <div className="mt-4 text-xs text-slate-300 flex items-center justify-center gap-1.5">
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
               {isAr ? "إنفق بأمان حتى نهاية اليوم" : "Spend safely until midnight"}
+            </div>
             </div>
 
             {/* Remaining salary balance for the rest of the cycle */}
