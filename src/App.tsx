@@ -792,11 +792,16 @@ export default function App() {
 
             {/* Phone Status Bar (Emulated Top - Cleaned as requested) */}
             <div className="flex justify-between items-center px-6 pt-3 pb-2 text-[10px] font-bold text-slate-400 select-none bg-gradient-to-b from-black/20 to-transparent">
-              <div>{currentTime}</div>
+              {/* M: the badge sits next to the clock (left side) rather than
+                  next to the "SafeSpend" label (right side) — the right side
+                  is the narrow strip between the center notch and the frame
+                  edge, and the enlarged badge no longer fit there without
+                  overlapping/getting clipped under the notch (z-30). The
+                  left side has the same amount of clear room the right side
+                  used to have before the badge grew, so this keeps both the
+                  clock and the label fully legible. */}
               <div className="flex items-center gap-1.5">
-                <span className="text-[9px] uppercase tracking-wider font-extrabold text-emerald-500/80">
-                  {isAr ? "الصرف الآمن" : "SafeSpend"}
-                </span>
+                <div>{currentTime}</div>
                 {/* PRELAUNCH-REVIEW: remove or repurpose this persistent
                     badge before any real/public launch — see the
                     safespend_prelaunch_text_checklist doc. */}
@@ -812,6 +817,9 @@ export default function App() {
                   {isAr ? "تجريبي" : "DEMO"}
                 </span>
               </div>
+              <span className="text-[9px] uppercase tracking-wider font-extrabold text-emerald-500/80">
+                {isAr ? "الصرف الآمن" : "SafeSpend"}
+              </span>
             </div>
 
             {/* Persistent SafeSpend Top Navigation Header */}
@@ -848,6 +856,11 @@ export default function App() {
                   safespend_prelaunch_text_checklist doc. It also replaces
                   the previous empty spacer, so it keeps the screen title
                   visually centered. */}
+              {/* M: solid WhatsApp-green fill instead of the earlier pale
+                  translucent tint — the tint read as "just another green
+                  button" next to the app's existing translucent-emerald
+                  "Screens" button, per explicit feedback that it needed to
+                  look clearly different/distinct, not blend in. */}
               <a
                 href={`https://wa.me/966564917311?text=${encodeURIComponent(
                   isAr
@@ -856,7 +869,7 @@ export default function App() {
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`flex items-center gap-1 px-2.5 py-1.5 bg-[#25D366]/15 border border-[#25D366]/60 hover:bg-[#25D366]/25 rounded-xl text-[#25D366] transition-all cursor-pointer font-bold ${isAr ? 'flex-row-reverse' : 'flex-row'}`}
+                className={`flex items-center gap-1 px-2.5 py-1.5 bg-[#25D366] hover:bg-[#20bd5a] rounded-xl text-[#062112] transition-all cursor-pointer font-bold shadow-sm ${isAr ? 'flex-row-reverse' : 'flex-row'}`}
                 title={isAr ? "أرسل ملاحظاتك" : "Send feedback"}
               >
                 <MessageCircle size={12} className="stroke-[2.5]" />
