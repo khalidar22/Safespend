@@ -703,6 +703,61 @@ export default function App() {
     setActiveScreen('splash');
   };
 
+  // Bug fix (#7 — default state for new/returning testers): before this,
+  // the ONLY documented way to wipe a device's data was manually clearing
+  // browser site-data (the in-app FAQ literally said "there is currently no
+  // Reset button inside the app itself" — see Settings > Help). That meant
+  // every re-test on the same phone/browser accumulated whatever the last
+  // round left behind (test categories, stray transactions, old salary
+  // figures, an already-dismissed onboarding tour), so a device could never
+  // be handed to a new tester in a genuinely clean state. This restores
+  // EVERY piece of persisted state to exactly what a brand-new install gets
+  // (see the `savedState?.X || <default>` fallbacks above) — never to
+  // pre-filled example/demo data (that's what the separate, developer-only
+  // `handleResetData` above does) — and clears the on-disk copy too, so nothing
+  // reappears on the next load. Standard, expected behavior for a "Reset /
+  // Delete all data" action in any consumer app (Settings > Privacy).
+  const handleFactoryReset = () => {
+    setTransactions([]);
+    setSavingBoxes([
+      { id: 'box-1', titleEn: 'Food & Cafes', titleAr: 'المطاعم والمقاهي', limit: 0, spent: 0, color: '#10b981', icon: 'coffee' },
+      { id: 'box-2', titleEn: 'Gas & Transit', titleAr: 'المواصلات والبنزين', limit: 0, spent: 0, color: '#f59e0b', icon: 'car' },
+      { id: 'box-3', titleEn: 'Housing & Rent', titleAr: 'السكن والمرافق', limit: 0, spent: 0, color: '#3b82f6', icon: 'home' },
+      { id: 'box-4', titleEn: 'Health & Sports', titleAr: 'الصحة والرياضة', limit: 0, spent: 0, color: '#f43f5e', icon: 'sliders' }
+    ]);
+    setCommitments([]);
+    setInstallments([]);
+    setFamilyMembers([]);
+    setGoals([]);
+    setBillSplits([]);
+    setLinkedBankAccounts([]);
+    setKidsCards([]);
+    setUserName('');
+    setUserEmail('email@example.com');
+    setIsNameCustomized(false);
+    setUserSalary(0);
+    setSalaryDay(25);
+    setUserIncomeSource('');
+    setSelectedPersona('persona-3');
+    setIsPremium(false);
+    setZakatFeatureEnabled(false);
+    setMicroThresholdPct(3);
+    setLastSeenAlertState('');
+    setLastDailyCalcDate('');
+    setTodaysSafeAmount(0);
+    setFrozenWithSalary(0);
+    setFreezeMethodVersion(0);
+    setLastResetCycleKey('');
+    setShowBalances(true);
+    setCurrency('SAR');
+    try {
+      localStorage.removeItem('safespend-v1');
+    } catch {
+      // ignore — worst case the old data reloads once more on next launch
+    }
+    setActiveScreen('splash');
+  };
+
   // Directory of the 19 poster screens for side-navigation click
   const POSTER_SCREENS = [
     { id: 'splash', num: 1, labelAr: 'شاشة البداية', labelEn: 'Splash Welcome' },
@@ -1060,6 +1115,7 @@ export default function App() {
                   isNameCustomized={isNameCustomized}
                   setIsNameCustomized={setIsNameCustomized}
                   onImportState={handleImportState}
+                  onFactoryReset={handleFactoryReset}
                   transactions={transactions}
                   setTransactions={setTransactions}
                   savingBoxes={savingBoxes}

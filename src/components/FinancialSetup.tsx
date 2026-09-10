@@ -6,6 +6,7 @@ import {
   Calendar, 
   Plus, 
   Trash2,
+  Edit3,
   Check,
   Briefcase,
   Users,
@@ -16,7 +17,7 @@ import {
 } from 'lucide-react';
 import { AppLanguage, ScreenId, Commitment, FinancialPersona } from '../types';
 import { FINANCIAL_PERSONAS, PERSONA_ACCENT } from '../mockData';
-import { todayLocalISO } from '../utils';
+import { resolveCommitmentPaidDate } from '../utils';
 
 // H14 fix: for a brand-new user `commitments` starts as [] (App.tsx), so the
 // "Commitments Setup Checklist" screen below (the final, MANDATORY onboarding
@@ -86,6 +87,14 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
   // commitment that would then subtract a non-positive amount from every
   // "available today" calculation.
   const [customAmountError, setCustomAmountError] = useState('');
+  // Bug fix (#3): previously an existing commitment could only have its
+  // amount changed inline — its name and due date were permanently locked
+  // once added (the only "fix" was deleting it and re-adding from scratch,
+  // losing its paid/unpaid state). Tracks which commitment (if any) is being
+  // edited so the existing "+ Add Custom Bill" form can be reused for
+  // editing too — same form, same validation, just updates in place instead
+  // of appending a new row when this is set.
+  const [editingCommitmentId, setEditingCommitmentId] = useState<string | null>(null);
 
   const handleToggleCommitment = (id: string) => {
     const target = commitments.find(c => c.id === id);
@@ -101,7 +110,13 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
         categoryEn: 'Commitments',
         amount: target.amount,
         type: 'expense' as const,
-        date: todayLocalISO(),
+        // Bug fix: use the commitment's actual due date within the current
+        // cycle, not today's date — see resolveCommitmentPaidDate's doc
+        // comment. Previously this was hardcoded to todayLocalISO(), which
+        // meant a new user entering an already-paid bill (e.g. rent due the
+        // 1st, entered on the 10th) had it recorded as spent TODAY, wrongly
+        // consuming today's safe-to-spend amount.
+        date: resolveCommitmentPaidDate(target.dueDate, salaryDay),
         icon: 'file-text',
       };
       setTransactions(prev => [newTx, ...prev]);
@@ -128,22 +143,51 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
     }
     setCustomAmountError('');
 
-    const newComm: Commitment = {
-      id: `custom-comm-${Date.now()}`,
-      titleEn: customTitleEn || customTitleAr,
-      titleAr: customTitleAr || customTitleEn,
-      amount: customAmount,
-      dueDate: customDay,
-      paid: false,
-      category: 'utility'
-    };
+    // Bug fix (#3): when editingCommitmentId is set, update that commitment
+    // in place (name + amount + due date, all three — not just amount)
+    // instead of appending a new one. paid/linkedTxId are left untouched so
+    // editing a bill's name or due day never disturbs its payment state.
+    if (editingCommitmentId) {
+      setCommitments(prev => prev.map(c => c.id === editingCommitmentId ? {
+        ...c,
+        titleEn: customTitleEn || customTitleAr,
+        titleAr: customTitleAr || customTitleEn,
+        amount: customAmount,
+        dueDate: customDay,
+      } : c));
+    } else {
+      const newComm: Commitment = {
+        id: `custom-comm-${Date.now()}`,
+        titleEn: customTitleEn || customTitleAr,
+        titleAr: customTitleAr || customTitleEn,
+        amount: customAmount,
+        dueDate: customDay,
+        paid: false,
+        category: 'utility'
+      };
+      setCommitments(prev => [...prev, newComm]);
+    }
 
-    setCommitments(prev => [...prev, newComm]);
+    setEditingCommitmentId(null);
     setCustomTitleEn('');
     setCustomTitleAr('');
     setCustomAmount(100);
+    setCustomDay('25');
     setCustomAmountError('');
     setShowAddCustom(false);
+  };
+
+  // Bug fix (#3): opens the same add-bill form pre-filled with an existing
+  // commitment's current name/amount/due-day, so correcting a typo no
+  // longer requires deleting the commitment and losing its paid state.
+  const handleStartEditCommitment = (comm: Commitment) => {
+    setEditingCommitmentId(comm.id);
+    setCustomTitleEn(comm.titleEn);
+    setCustomTitleAr(comm.titleAr);
+    setCustomAmount(comm.amount);
+    setCustomDay(comm.dueDate);
+    setCustomAmountError('');
+    setShowAddCustom(true);
   };
 
   // H14 fix (v2): tapping a suggestion chip no longer injects a commitment
@@ -157,6 +201,7 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
   // (handleAddCustomCommitment) — one single source of truth for adding any
   // commitment, suggested or custom.
   const handleSelectSuggestedCommitment = (s: { titleEn: string; titleAr: string; category: string }) => {
+    setEditingCommitmentId(null);
     setCustomTitleEn(s.titleEn);
     setCustomTitleAr(s.titleAr);
     setCustomAmountError('');
@@ -510,9 +555,21 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
 
                 <div className="flex items-center gap-3 shrink-0" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-1">
-                    <input 
+                    <input
                       type="number"
                       value={comm.amount}
+                      // Bug fix (#2): select the existing value on focus, the
+                      // standard pattern used by Stripe/PayPal/Square-style
+                      // amount fields — the very first keystroke replaces the
+                      // whole "0" instead of the user having to manually
+                      // position the cursor after it or select-and-delete
+                      // first. (A plain type="number" input bound directly to
+                      // a number can't just show "" while the field is
+                      // legitimately empty mid-edit — Number('') is 0, which
+                      // would immediately snap back to "0" — so auto-select
+                      // is the reliable fix here, not a controlled-empty-
+                      // string workaround.)
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => {
                         const val = Number(e.target.value);
                         setCommitments(prev => prev.map(c => c.id === comm.id ? { ...c, amount: val } : c));
@@ -520,6 +577,22 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                       className="w-14 bg-slate-950 border border-emerald-900/60 rounded px-1.5 py-1 text-center font-mono font-bold text-xs text-emerald-400 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
+
+                  {/* Bug fix (#3): the inline amount field above was the ONLY
+                      thing editable on an existing commitment — its name and
+                      due date were locked in forever once added. This opens
+                      the same add-bill form, pre-filled, so all three (name,
+                      amount, due date) can be corrected without deleting and
+                      losing the commitment's paid/unpaid state. */}
+                  <button
+                    type="button"
+                    onClick={() => handleStartEditCommitment(comm)}
+                    aria-label={isAr ? `تعديل التزام: ${comm.titleAr}` : `Edit commitment: ${comm.titleEn}`}
+                    className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-emerald-400 rounded-lg hover:bg-emerald-500/10 transition-colors"
+                    title={isAr ? "تعديل" : "Edit"}
+                  >
+                    <Edit3 size={13} />
+                  </button>
 
                   {/* M38 fix: this delete button relied only on the `title`
                       attribute (a hover tooltip, not reliably announced by
@@ -530,6 +603,13 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                     type="button"
                     onClick={() => {
                       setCommitments(prev => prev.filter(c => c.id !== comm.id));
+                      // Bug fix (#3): if the deleted row was mid-edit, close
+                      // the (now stale) edit form instead of leaving it open
+                      // pointed at a commitment that no longer exists.
+                      if (editingCommitmentId === comm.id) {
+                        setEditingCommitmentId(null);
+                        setShowAddCustom(false);
+                      }
                     }}
                     aria-label={isAr ? `حذف التزام: ${comm.titleAr}` : `Delete commitment: ${comm.titleEn}`}
                     className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-400 hover:text-rose-400 rounded-lg hover:bg-rose-500/10 transition-colors"
@@ -545,7 +625,7 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
           {/* Add custom commitment trigger */}
           {!showAddCustom ? (
             <button
-              onClick={() => { setCustomAmountError(''); setShowAddCustom(true); }}
+              onClick={() => { setEditingCommitmentId(null); setCustomAmountError(''); setShowAddCustom(true); }}
               className="mt-3 py-2 w-full border border-dashed border-emerald-800/50 hover:border-emerald-500 hover:bg-[#061d19]/20 transition-all text-emerald-400 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1"
             >
               <Plus size={12} />
@@ -553,6 +633,15 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
             </button>
           ) : (
             <form onSubmit={handleAddCustomCommitment} className="mt-3 p-3 bg-[#051411] border border-emerald-500/20 rounded-xl flex flex-col gap-2">
+              {/* Bug fix (#3): the form's own heading makes it explicit
+                  whether this submit will update the tapped commitment or
+                  create a new one — important since it's the exact same
+                  form doing both jobs now. */}
+              {editingCommitmentId && (
+                <span className="text-[10px] text-emerald-400 font-bold px-1 -mb-1">
+                  {isAr ? "تعديل التزام موجود" : "Editing existing commitment"}
+                </span>
+              )}
               <div className="flex flex-col gap-1">
                 <span className="text-[9px] text-emerald-500/80 font-bold px-1">
                   {isAr ? "اسم الالتزام" : "Commitment Name"}
@@ -605,6 +694,11 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                   <input
                     type="number"
                     value={customAmount}
+                    // Bug fix (#2): same select-on-focus fix as the inline
+                    // amount field above — matters here too since editing an
+                    // existing commitment (handleStartEditCommitment) can
+                    // pre-fill this with a 0 amount.
+                    onFocus={(e) => e.target.select()}
                     onChange={e => setCustomAmount(Number(e.target.value))}
                     placeholder="المبلغ"
                     min="0.01"
@@ -632,16 +726,18 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
               <div className="flex gap-2 mt-1">
                 <button
                   type="button"
-                  onClick={() => { setCustomAmountError(''); setShowAddCustom(false); }}
+                  onClick={() => { setEditingCommitmentId(null); setCustomAmountError(''); setShowAddCustom(false); }}
                   className="px-2 py-1 bg-rose-950/30 text-rose-400 text-[9px] font-bold rounded hover:bg-rose-900/20"
                 >
                   {isAr ? "إلغاء" : "Cancel"}
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="flex-1 py-1 bg-emerald-500 text-[#030d0a] text-[9px] font-bold rounded hover:bg-emerald-400"
                 >
-                  {isAr ? "إضافة" : "Add Bill"}
+                  {editingCommitmentId
+                    ? (isAr ? "حفظ التعديلات" : "Save Changes")
+                    : (isAr ? "إضافة" : "Add Bill")}
                 </button>
               </div>
             </form>

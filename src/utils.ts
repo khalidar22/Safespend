@@ -217,6 +217,55 @@ export function getCycleBounds(salaryDay: number, cyclesAgo: number = 0): { cycl
 }
 
 /**
+ * Resolves a commitment's `dueDate` (day-of-month only, e.g. "1" or "25" —
+ * no year/month is ever stored, see Commitment type) into a concrete
+ * "YYYY-MM-DD" calendar date for the CURRENT salary cycle.
+ *
+ * Bug this fixes: marking a commitment "paid" (handleToggleCommitment /
+ * handleTogglePaid) used to always stamp the created expense transaction
+ * with today's date via todayLocalISO(), regardless of the commitment's
+ * actual due day. For a brand-new user who onboards mid-cycle and enters
+ * bills they already paid earlier this cycle (e.g. salary day = 1st, they
+ * open the app on the 10th and mark rent — due the 1st — as paid), that
+ * silently recorded the rent payment as having happened TODAY. Since
+ * "safe to spend today" subtracts today's transactions from today's frozen
+ * ceiling, a large historical bill landing on today's date could wipe out
+ * or go negative on an amount the user hasn't actually spent yet today.
+ *
+ * Resolution mirrors getCycleBounds' own start/end-month split: a due-day
+ * on/after salaryDay falls in the cycle-start month, one before it falls in
+ * the following month. The result is then capped at today — a bill can
+ * never be recorded as paid in the future, even if its due day hasn't
+ * arrived yet this cycle (marking it paid early just means "paid today").
+ */
+export function resolveCommitmentPaidDate(dueDate: string, salaryDay: number): string {
+  const { cycleStart } = getCycleBounds(salaryDay);
+  const clampDayInMonth = (y: number, m: number, d: number) =>
+    Math.max(1, Math.min(d, new Date(y, m + 1, 0).getDate()));
+
+  const rawDueDay = parseInt(dueDate, 10) || 1;
+  const salaryDayClamped = Math.max(1, Math.min(salaryDay || 1, 31));
+
+  let y = cycleStart.getFullYear();
+  let m = cycleStart.getMonth();
+  if (rawDueDay < salaryDayClamped) {
+    m += 1;
+    if (m > 11) { m = 0; y += 1; }
+  }
+
+  const resolved = new Date(y, m, clampDayInMonth(y, m, rawDueDay));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  resolved.setHours(0, 0, 0, 0);
+
+  const finalDate = resolved.getTime() > today.getTime() ? today : resolved;
+  const yyyy = finalDate.getFullYear();
+  const mm = String(finalDate.getMonth() + 1).padStart(2, '0');
+  const dd = String(finalDate.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
  * Computes live "spent this cycle" for each saving box, from actual transactions,
  * instead of relying on the accumulated (and never-reset) box.spent field.
  */

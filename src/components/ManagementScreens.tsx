@@ -40,7 +40,7 @@ import {
   LinkedBankAccount,
   KidsCard
 } from '../types';
-import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, projectBnplRatio, getZakatEstimate, computeEqualSplit, getTotalOwedToUser, buildSplitShareText, createDemoLinkedAccount, getLinkedAccountsTotal, createDemoKidsCard, todayLocalISO, isValidBackupShape, sortCommitmentsByDueProximity } from '../utils';
+import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, projectBnplRatio, getZakatEstimate, computeEqualSplit, getTotalOwedToUser, buildSplitShareText, createDemoLinkedAccount, getLinkedAccountsTotal, createDemoKidsCard, todayLocalISO, isValidBackupShape, sortCommitmentsByDueProximity, resolveCommitmentPaidDate } from '../utils';
 import { CURRENCIES, getCurrency } from '../currencies';
 import { getProvidersForCurrency, getProvider } from '../bnplProviders';
 
@@ -78,6 +78,11 @@ interface ManagementScreensProps {
   isNameCustomized: boolean;
   setIsNameCustomized: (val: boolean) => void;
   onImportState: (state: any) => void;
+  // Bug fix (#7): a real, in-app "delete everything and start fresh" action
+  // — previously this didn't exist for real users at all (see the FAQ text
+  // this replaces below), so every re-test on the same device/browser kept
+  // accumulating the previous round's data.
+  onFactoryReset: () => void;
   transactions: any[];
   setTransactions: React.Dispatch<React.SetStateAction<any[]>>;
   savingBoxes: any[];
@@ -121,6 +126,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   isNameCustomized,
   setIsNameCustomized,
   onImportState,
+  onFactoryReset,
   transactions,
   setTransactions,
   savingBoxes,
@@ -210,6 +216,10 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   // and what to be careful with (don't share/upload it, don't leave it in
   // a shared/cloud-synced folder) before the download actually starts.
   const [showExportWarning, setShowExportWarning] = useState<boolean>(false);
+  // Bug fix (#7): confirmation gate for the new "delete all data" action —
+  // destructive and irreversible, so it needs the same explicit
+  // are-you-sure step as every other industry-standard "Reset app" control.
+  const [showFactoryResetConfirm, setShowFactoryResetConfirm] = useState<boolean>(false);
 
   const handleStartAddInstallment = () => {
     setEditingInstallmentId(null);
@@ -513,7 +523,12 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
         categoryEn: 'Commitments',
         amount: target.amount,
         type: 'expense' as const,
-        date: todayLocalISO(),
+        // Bug fix: use the commitment's actual due date within the current
+        // cycle, not today's date — see resolveCommitmentPaidDate's doc
+        // comment in utils.ts. Previously hardcoded to todayLocalISO(),
+        // which recorded an already-paid bill as spent TODAY and wrongly
+        // consumed today's safe-to-spend amount.
+        date: resolveCommitmentPaidDate(target.dueDate, salaryDay),
         icon: 'file-text',
       };
       setTransactions(prev => [newTx, ...prev]);
@@ -2601,7 +2616,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                       <p><strong className="text-emerald-400">لا يوجد فريق دعم رسمي حالياً:</strong> بما أن هذا وضع تجريبي محلي بالكامل، لا يوجد فريق دعم بشري يستقبل تذاكر دعم في هذه النسخة — لكن أي ملاحظة أو خطأ تلقاه، تواصل معي عبر زر "ملاحظات" الأخضر الموجود بأعلى كل شاشة في التطبيق.</p>
                       <p><strong className="text-emerald-400">أين بياناتي؟ هل هي آمنة؟</strong> راجع "سياسة الخصوصية والشروط" أعلاه — كل بياناتك محفوظة محلياً فقط على جهازك.</p>
                       <p><strong className="text-emerald-400">كيف أحتفظ بنسخة من بياناتي أو أنقلها لجهاز آخر؟</strong> استخدم "تصدير البيانات" في قسم "صيانة البيانات والنسخ الاحتياطي" أدناه، ثم "استيراد البيانات" على الجهاز الآخر.</p>
-                      <p><strong className="text-emerald-400">كيف أبدأ من جديد؟</strong> لا يوجد حالياً زر "إعادة تعيين" داخل التطبيق نفسه. لحذف كل بياناتك المحلية نهائياً، امسح بيانات هذا الموقع من إعدادات متصفحك (Site Data / Clear Browsing Data لهذا الرابط تحديداً).</p>
+                      <p><strong className="text-emerald-400">كيف أبدأ من جديد؟</strong> استخدم زر "حذف كل البيانات والبدء من جديد" (باللون الأحمر) في قسم "صيانة البيانات والنسخ الاحتياطي" أدناه — يحذف كل بياناتك المحلية نهائياً ويعيدك لشاشة البداية.</p>
                       <p className="text-slate-500 text-[10px]">آخر تحديث: سبتمبر 2026.</p>
                     </>
                   ) : (
@@ -2610,7 +2625,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                       <p><strong className="text-emerald-400">No official support team yet:</strong> Since this is a fully local demo, there's no human support team receiving tickets in this build — but for any feedback or bug, use the green "Feedback" button at the top of every screen in the app.</p>
                       <p><strong className="text-emerald-400">Where is my data? Is it safe?</strong> See "Terms & Privacy Agreement" above — all your data is stored locally on your device only.</p>
                       <p><strong className="text-emerald-400">How do I back up my data or move it to another device?</strong> Use "Export Data" in the "Data Maintenance & Backup" section below, then "Import Data" on the other device.</p>
-                      <p><strong className="text-emerald-400">How do I start fresh?</strong> There is currently no "Reset" button inside the app itself. To permanently delete all your local data, clear this site's data from your browser settings (Site Data / Clear Browsing Data for this specific URL).</p>
+                      <p><strong className="text-emerald-400">How do I start fresh?</strong> Use the "Delete All Data & Start Fresh" button (in red) in the "Data Maintenance & Backup" section below — it permanently deletes all your local data and returns you to the start screen.</p>
                       <p className="text-slate-500 text-[10px]">Last updated: September 2026.</p>
                     </>
                   )}
@@ -2644,7 +2659,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                     <>
                       <p><strong className="text-emerald-400">أين تُحفظ بياناتك:</strong> جميع بياناتك (المعاملات، الميزانيات، الأهداف، الأقساط) تُخزَّن محلياً فقط على جهازك (localStorage)، ولا تُرسَل أو تُخزَّن على أي خادم خارجي. هذا وضع تجريبي/محاكاة (Simulator) لا يتطلب حساباً أو اتصالاً بالإنترنت لعمله.</p>
                       <p><strong className="text-emerald-400">المشاركة مع أطراف ثالثة:</strong> لا تُشارك بياناتك مع أي طرف ثالث، ولا تُستخدم لأي غرض تسويقي، لأنها لا تغادر جهازك أصلاً.</p>
-                      <p><strong className="text-emerald-400">حذف بياناتك:</strong> يمكنك حذف كل بياناتك بالكامل في أي وقت بمسح بيانات هذا الموقع من إعدادات متصفحك (لا يوجد حالياً زر "إعادة تعيين" داخل التطبيق نفسه).</p>
+                      <p><strong className="text-emerald-400">حذف بياناتك:</strong> يمكنك حذف كل بياناتك بالكامل في أي وقت عبر زر "حذف كل البيانات والبدء من جديد" في قسم "صيانة البيانات والنسخ الاحتياطي" أدناه.</p>
                       <p><strong className="text-emerald-400">حقوقك بموجب نظام حماية البيانات الشخصية السعودي (PDPL):</strong> لديك الحق الكامل بالوصول لبياناتك (عبر "تصدير البيانات")، وتصحيحها، وحذفها — وبما أن التخزين محلي بالكامل، هذه الحقوق متاحة لك مباشرة وفورياً بلا حاجة لطلب من أي جهة.</p>
                       <p className="text-slate-500 text-[10px]">آخر تحديث: سبتمبر 2026.</p>
                     </>
@@ -2652,7 +2667,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                     <>
                       <p><strong className="text-emerald-400">Where your data lives:</strong> All your data (transactions, budgets, goals, installments) is stored locally on your device only (localStorage). Nothing is sent to or stored on any external server. This is a simulator that needs no account or internet connection to function.</p>
                       <p><strong className="text-emerald-400">Third-party sharing:</strong> Your data is never shared with any third party and is never used for marketing, because it never leaves your device.</p>
-                      <p><strong className="text-emerald-400">Deleting your data:</strong> You can delete all your data at any time by clearing this site's data in your browser settings (there is currently no "Reset" button inside the app itself).</p>
+                      <p><strong className="text-emerald-400">Deleting your data:</strong> You can delete all your data at any time via the "Delete All Data & Start Fresh" button in the "Data Maintenance & Backup" section below.</p>
                       <p><strong className="text-emerald-400">Your rights under Saudi PDPL:</strong> You have full rights to access your data (via "Export Data"), correct it, and delete it — and since storage is fully local, these rights are immediately available to you without needing to request anything from anyone.</p>
                       <p className="text-slate-500 text-[10px]">Last updated: September 2026.</p>
                     </>
@@ -2731,14 +2746,68 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
               >
                 <Save size={13} className="rotate-180" />
                 <span>{isAr ? "استيراد البيانات" : "Import Data"}</span>
-                <input 
-                  type="file" 
-                  accept=".json" 
-                  onChange={importData} 
-                  className="hidden" 
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={importData}
+                  className="hidden"
                 />
               </label>
             </div>
+
+            {/* Bug fix (#7): real "delete all data / start fresh" button.
+                Previously the only way to reach a clean state was manually
+                clearing browser site-data outside the app (see the FAQ text
+                below, now updated). Gated behind a confirmation dialog since
+                it's destructive and cannot be undone. */}
+            <button
+              type="button"
+              onClick={() => setShowFactoryResetConfirm(true)}
+              className="w-full py-2.5 px-3 bg-rose-950/30 hover:bg-rose-950/50 border border-rose-950/50 text-rose-400 font-bold rounded-xl flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+            >
+              <Trash2 size={13} />
+              <span>{isAr ? "حذف كل البيانات والبدء من جديد" : "Delete All Data & Start Fresh"}</span>
+            </button>
+
+            {showFactoryResetConfirm && (
+              <div className="fixed inset-0 bg-[#020b09]/90 z-50 flex items-center justify-center p-4">
+                <div className="bg-[#03110d] rounded-3xl border border-rose-950/60 p-6 w-full max-w-sm flex flex-col gap-4 shadow-2xl" dir={isAr ? 'rtl' : 'ltr'}>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <AlertTriangle size={16} className="text-rose-400" />
+                    {isAr ? "حذف كل البيانات؟" : "Delete all data?"}
+                  </h3>
+                  <div className="text-[11px] text-slate-300 leading-relaxed flex flex-col gap-2.5">
+                    {isAr ? (
+                      <>
+                        <p>سيتم حذف <strong className="text-rose-300">كل بياناتك</strong> نهائياً من هذا الجهاز — المعاملات، الفئات، الالتزامات، الأقساط، الأهداف، الراتب، وكل الإعدادات — والعودة لشاشة البداية كأنك تفتح التطبيق لأول مرة.</p>
+                        <p>هذا الإجراء <strong className="text-rose-300">لا يمكن التراجع عنه</strong>. إن أردت الاحتفاظ بنسخة، اضغط "تصدير البيانات" أولاً قبل المتابعة.</p>
+                      </>
+                    ) : (
+                      <>
+                        <p>This permanently deletes <strong className="text-rose-300">all your data</strong> on this device — transactions, categories, commitments, installments, goals, salary, and every setting — and returns you to the start screen as if opening the app for the first time.</p>
+                        <p>This action <strong className="text-rose-300">cannot be undone</strong>. If you want to keep a copy, tap "Export Data" first before continuing.</p>
+                      </>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowFactoryResetConfirm(false)}
+                      className="py-2.5 bg-[#030d0a] border border-emerald-950 text-slate-300 text-xs font-bold rounded-xl hover:bg-emerald-950/30 transition-all"
+                    >
+                      {isAr ? "إلغاء" : "Cancel"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowFactoryResetConfirm(false); onFactoryReset(); }}
+                      className="py-2.5 bg-rose-500 hover:bg-rose-400 text-[#030d0a] text-xs font-bold rounded-xl transition-all"
+                    >
+                      {isAr ? "نعم، احذف كل شيء" : "Yes, delete everything"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <div className="h-24 shrink-0" />

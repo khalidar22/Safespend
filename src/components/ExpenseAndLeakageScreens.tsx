@@ -50,7 +50,7 @@ import {
   Search,
 } from 'lucide-react';
 import { AppLanguage, ScreenId, Transaction, SavingBox, Commitment, FinancialGoal } from '../types';
-import { formatMoney, computeLiveSpent, getCycleBounds, sumAmounts, parseLocalDateOnly } from '../utils';
+import { formatMoney, computeLiveSpent, getCycleBounds, sumAmounts, parseLocalDateOnly, todayLocalISO } from '../utils';
 
 const EMOJI_SECTIONS: { ar: string; en: string; items: [string, string][] }[] = [
   { ar: 'طعام وشراب', en: 'Food & Drink', items: [
@@ -180,6 +180,18 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
 }) => {
   const isAr = lang === 'ar';
 
+  // Bug fix (#5): the "Spending Categories" screen's own back button always
+  // returns to the Dashboard (its normal entry point from the bottom nav /
+  // "View All" card). The new "Manage Categories" link on the Add Expense
+  // form (below) also opens this same screen — but going back to Dashboard
+  // from there would silently drop the user's in-progress expense entry
+  // (amount typed, date picked) instead of returning them to it. This
+  // remembers which screen actually opened Categories, ONLY when it was
+  // Add Expense, so its back button can return there; every other entry
+  // point (bottom nav, dashboard cards) is unaffected and still goes to
+  // Dashboard exactly as before.
+  const [categoriesReturnScreen, setCategoriesReturnScreen] = useState<ScreenId>('dashboard');
+
   // State for Add Expense Form (Screen 9)
   const [expenseAmount, setExpenseAmount] = useState<string>('');
   // H5/H6/H7 fix: store the selected saving box's stable `id`, not its array
@@ -216,13 +228,17 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savingBoxes]);
   const [expenseNote, setExpenseNote] = useState<string>('');
-  const [expenseDate, setExpenseDate] = useState<string>(() => {
+  const [expenseDate, setExpenseDate] = useState<string>(() => todayLocalISO());
+  // Bug fix: yesterday's date, in the same local (never UTC) form as
+  // todayLocalISO — used by the "Yesterday" quick-pick chip below.
+  const yesterdayLocalISO = (): string => {
     const d = new Date();
+    d.setDate(d.getDate() - 1);
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
-  });
+  };
   const [addFeedback, setAddFeedback] = useState<string>('');
 
   // Overrun Warn States
@@ -481,7 +497,15 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
         <div className="flex items-center gap-3 mb-6">
           <button
             type="button"
-            onClick={() => onNavigate('dashboard')}
+            onClick={() => {
+              // Bug fix (#5): return to whichever screen actually opened this
+              // one (Add Expense, via "Manage Categories") instead of always
+              // jumping to Dashboard. Reset immediately after so a later,
+              // normal entry into this screen (bottom nav / dashboard card)
+              // still goes back to Dashboard as always.
+              onNavigate(categoriesReturnScreen);
+              setCategoriesReturnScreen('dashboard');
+            }}
             aria-label={isAr ? "رجوع" : "Back"}
             className="p-1.5 rounded-lg bg-emerald-950/40 text-emerald-400 hover:bg-emerald-900/30 min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
@@ -973,9 +997,29 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
 
           {/* Select Category Box */}
           <div>
-            <label className="text-xs text-emerald-400 font-bold block mb-1.5">
-              {isAr ? "فئة الإنفاق" : "Spending Category"}
-            </label>
+            {/* Bug fix (#5): a brand-new user landing on this form has no
+                idea where category limits/names are managed — that's a
+                whole separate screen ("Spending Categories" / #boxes) with
+                no link from here before this fix. Standard pattern (e.g.
+                email clients' "Manage labels" link next to a label picker):
+                a small text link right next to the field itself, going
+                straight to that screen — not buried in Settings. */}
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs text-emerald-400 font-bold">
+                {isAr ? "فئة الإنفاق" : "Spending Category"}
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setCategoriesReturnScreen('add_expense');
+                  onNavigate('boxes');
+                }}
+                className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-emerald-400 transition-colors"
+              >
+                <Sliders size={11} />
+                <span>{isAr ? "إدارة الفئات" : "Manage Categories"}</span>
+              </button>
+            </div>
             <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={isAr ? "فئة الإنفاق" : "Spending Category"}>
               {savingBoxes.map((box) => (
                 <button
@@ -1002,43 +1046,63 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
           </div>
 
           {/* Date Picker */}
+          {/* Bug fix (backdated expenses): the previous version stored the
+              real <input type="date"> completely invisibly
+              (sr-only + pointer-events-none) and only opened it by calling
+              input.showPicker()/input.click() from a wrapper div's onClick.
+              On many strict mobile browsers/in-app webviews (WhatsApp,
+              Instagram, etc. — exactly how testers open this app), a native
+              date picker only opens on a genuinely TRUSTED user gesture; a
+              programmatic .click() dispatched from JavaScript is not always
+              treated as one and can silently do nothing, which reads to the
+              user as "I can't pick another date; it's stuck on today."
+              Standard fix used by production custom-styled date inputs: keep
+              the styled display, but stack the REAL input transparently
+              (opacity-0, not pointer-events-none) directly on top of it, so
+              the user's tap lands on the native input itself. Also adds
+              explicit "Today" / "Yesterday" quick-pick chips so backdating
+              an already-paid bill never depends on the picker at all. */}
           <div>
             <label className="text-xs text-emerald-400 font-bold block mb-1.5">
               {isAr ? "التاريخ" : "Transaction Date"}
             </label>
-            <div className="relative flex gap-2">
-              {/* Hidden input to store date value */}
-              <input
-                type="date"
-                value={expenseDate}
-                onChange={(e) => setExpenseDate(e.target.value)}
-                className="sr-only opacity-0 pointer-events-none absolute"
-              />
-              
-              {/* Display formatted date */}
-              <div 
-                className="w-full pl-9 pr-4 py-2.5 bg-[#051411] border border-emerald-950 rounded-xl text-xs text-white font-mono flex items-center cursor-pointer relative"
-                onClick={(e) => {
-                  const container = e.currentTarget.parentElement;
-                  const input = container?.querySelector('input[type="date"]') as HTMLInputElement;
-                  if (input) {
-                    if (typeof input.showPicker === 'function') {
-                      try {
-                        input.showPicker();
-                      } catch {
-                        input.click();
-                      }
-                    } else {
-                      input.click();
-                    }
-                  }
-                }}
+
+            {/* Quick-pick chips: covers the most common backdating need
+                (a bill/expense from yesterday or earlier) without touching
+                the date picker at all. */}
+            <div className="flex gap-2 mb-2">
+              <button
+                type="button"
+                onClick={() => setExpenseDate(todayLocalISO())}
+                className={`flex-1 py-2 rounded-xl text-[11px] font-bold border transition-colors ${
+                  expenseDate === todayLocalISO()
+                    ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
+                    : 'bg-[#051411] border-emerald-950 text-slate-400'
+                }`}
               >
+                {isAr ? "اليوم" : "Today"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setExpenseDate(yesterdayLocalISO())}
+                className={`flex-1 py-2 rounded-xl text-[11px] font-bold border transition-colors ${
+                  expenseDate === yesterdayLocalISO()
+                    ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
+                    : 'bg-[#051411] border-emerald-950 text-slate-400'
+                }`}
+              >
+                {isAr ? "أمس" : "Yesterday"}
+              </button>
+            </div>
+
+            <div className="relative">
+              {/* Display formatted date (purely visual) */}
+              <div className="w-full pl-9 pr-4 py-2.5 bg-[#051411] border border-emerald-950 rounded-xl text-xs text-white font-mono flex items-center relative">
                 <Calendar size={14} className="absolute top-3 left-3 text-slate-400 pointer-events-none" />
                 <span>
                   {expenseDate ? (() => {
                     const [year, month, day] = expenseDate.split('-');
-                    const monthNames = isAr 
+                    const monthNames = isAr
                       ? ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
                       : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                     const monthName = monthNames[parseInt(month, 10) - 1] || '';
@@ -1046,7 +1110,25 @@ export const ExpenseAndLeakageScreens: React.FC<ExpenseAndLeakageScreensProps> =
                   })() : (isAr ? 'اختر التاريخ' : 'Select Date')}
                 </span>
               </div>
+              {/* Real native input, transparently stacked on top so taps land
+                  directly on it (a genuine trusted gesture) instead of being
+                  forwarded via JS. No `min` — any past date is allowed by
+                  design (backdating is the whole point); `max` blocks only
+                  future dates. */}
+              <input
+                type="date"
+                value={expenseDate}
+                max={todayLocalISO()}
+                onChange={(e) => e.target.value && setExpenseDate(e.target.value)}
+                aria-label={isAr ? "اختر التاريخ" : "Select date"}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
             </div>
+            <p className="text-[10px] text-slate-500 mt-1.5">
+              {isAr
+                ? "يمكنك اختيار أي تاريخ سابق — مفيد لتسجيل مصروف حدث قبل اليوم."
+                : "You can pick any past date — useful for logging an expense that happened before today."}
+            </p>
           </div>
 
           {/* Note / Memo */}
