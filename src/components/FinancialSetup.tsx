@@ -96,6 +96,20 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
   // of appending a new row when this is set.
   const [editingCommitmentId, setEditingCommitmentId] = useState<string | null>(null);
 
+  // Bug fix (#5): clearing a number input on focus by setting the bound
+  // state to 0 doesn't actually show an empty field — React immediately
+  // re-renders the controlled input with value={0}, which displays "0",
+  // not blank. The fix is the standard controlled-input pattern: while a
+  // field is focused, its displayed value comes from a separate string
+  // ("what's currently typed", which CAN legitimately be empty) instead of
+  // straight from the numeric model. On blur we drop back to showing the
+  // real numeric value. editingAmountRowId/-Value cover the per-row inline
+  // amount field below; customAmountDisplay covers the Add/Edit form's
+  // Amount field further down.
+  const [editingAmountRowId, setEditingAmountRowId] = useState<string | null>(null);
+  const [editingAmountRowValue, setEditingAmountRowValue] = useState('');
+  const [customAmountDisplay, setCustomAmountDisplay] = useState<string | null>(null);
+
   const handleToggleCommitment = (id: string) => {
     const target = commitments.find(c => c.id === id);
     if (!target) return;
@@ -557,18 +571,25 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                   <div className="flex items-center gap-1">
                     <input
                       type="number"
-                      value={comm.amount}
+                      // BUG FIX (#5): while this row's field is focused, show
+                      // the separately-tracked typed string (starts empty)
+                      // instead of comm.amount, so the field visibly stays
+                      // blank instead of snapping back to "0".
+                      value={editingAmountRowId === comm.id ? editingAmountRowValue : comm.amount}
                       // BUG FIX (#2) — REFINED: type="number" doesn't support .select()
                       // reliably. On focus, clear the field entirely so the next keystroke
                       // replaces everything instead of appending. Works like Stripe/PayPal.
                       onFocus={(e) => {
-                        e.target.value = '';
+                        setEditingAmountRowId(comm.id);
+                        setEditingAmountRowValue('');
                         setCommitments(prev => prev.map(c => c.id === comm.id ? { ...c, amount: 0 } : c));
                       }}
                       onChange={(e) => {
+                        setEditingAmountRowValue(e.target.value);
                         const val = Number(e.target.value) || 0;
                         setCommitments(prev => prev.map(c => c.id === comm.id ? { ...c, amount: val } : c));
                       }}
+                      onBlur={() => setEditingAmountRowId(null)}
                       className="w-14 bg-slate-950 border border-emerald-900/60 rounded px-1.5 py-1 text-center font-mono font-bold text-xs text-emerald-400 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
@@ -698,17 +719,26 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                   </span>
                   <input
                     type="number"
-                    value={customAmount}
+                    // BUG FIX (#5): same controlled-input fix as the per-row
+                    // amount field — while focused, show the separately
+                    // tracked typed string (which can be genuinely empty)
+                    // instead of customAmount, so the field stays visibly
+                    // blank instead of re-rendering back to "0".
+                    value={customAmountDisplay !== null ? customAmountDisplay : customAmount}
                     // BUG FIX (#2) — REFINED: type="number" doesn't support .select()
                     // reliably across browsers/platforms. Instead, clear the field
                     // completely on focus — when user taps, field becomes empty so they
                     // can type the new value without any old digits hanging around.
                     // (On desktop with keyboard, triple-click is the native fallback.)
                     onFocus={(e) => {
-                      e.target.value = '';
+                      setCustomAmountDisplay('');
                       setCustomAmount(0);
                     }}
-                    onChange={e => setCustomAmount(Number(e.target.value) || 0)}
+                    onChange={e => {
+                      setCustomAmountDisplay(e.target.value);
+                      setCustomAmount(Number(e.target.value) || 0);
+                    }}
+                    onBlur={() => setCustomAmountDisplay(null)}
                     placeholder="المبلغ"
                     min="0.01"
                     step="0.01"
