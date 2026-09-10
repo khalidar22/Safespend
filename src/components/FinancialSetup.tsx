@@ -597,6 +597,16 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                   <button
                     type="button"
                     onClick={() => {
+                      // Bug fix (#4): deleting a commitment only removed it
+                      // from the commitments list — if it had already been
+                      // marked paid (has a linkedTxId), the transaction it
+                      // created stayed behind as an orphaned entry in the
+                      // operations/transactions history forever. Same pattern
+                      // as the "unmark as paid" toggle above: when the link
+                      // is broken, the linked transaction must go with it.
+                      if (comm.linkedTxId) {
+                        setTransactions(prev => prev.filter(t => t.id !== comm.linkedTxId));
+                      }
                       setCommitments(prev => prev.filter(c => c.id !== comm.id));
                       // Bug fix (#3): if the deleted row was mid-edit, close
                       // the (now stale) edit form instead of leaving it open
