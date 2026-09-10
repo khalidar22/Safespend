@@ -558,20 +558,15 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                     <input
                       type="number"
                       value={comm.amount}
-                      // Bug fix (#2): select the existing value on focus, the
-                      // standard pattern used by Stripe/PayPal/Square-style
-                      // amount fields — the very first keystroke replaces the
-                      // whole "0" instead of the user having to manually
-                      // position the cursor after it or select-and-delete
-                      // first. (A plain type="number" input bound directly to
-                      // a number can't just show "" while the field is
-                      // legitimately empty mid-edit — Number('') is 0, which
-                      // would immediately snap back to "0" — so auto-select
-                      // is the reliable fix here, not a controlled-empty-
-                      // string workaround.)
-                      onFocus={(e) => e.target.select()}
+                      // BUG FIX (#2) — REFINED: type="number" doesn't support .select()
+                      // reliably. On focus, clear the field entirely so the next keystroke
+                      // replaces everything instead of appending. Works like Stripe/PayPal.
+                      onFocus={(e) => {
+                        e.target.value = '';
+                        setCommitments(prev => prev.map(c => c.id === comm.id ? { ...c, amount: 0 } : c));
+                      }}
                       onChange={(e) => {
-                        const val = Number(e.target.value);
+                        const val = Number(e.target.value) || 0;
                         setCommitments(prev => prev.map(c => c.id === comm.id ? { ...c, amount: val } : c));
                       }}
                       className="w-14 bg-slate-950 border border-emerald-900/60 rounded px-1.5 py-1 text-center font-mono font-bold text-xs text-emerald-400 focus:outline-none focus:border-emerald-500"
@@ -694,12 +689,16 @@ export const FinancialSetup: React.FC<FinancialSetupProps> = ({
                   <input
                     type="number"
                     value={customAmount}
-                    // Bug fix (#2): same select-on-focus fix as the inline
-                    // amount field above — matters here too since editing an
-                    // existing commitment (handleStartEditCommitment) can
-                    // pre-fill this with a 0 amount.
-                    onFocus={(e) => e.target.select()}
-                    onChange={e => setCustomAmount(Number(e.target.value))}
+                    // BUG FIX (#2) — REFINED: type="number" doesn't support .select()
+                    // reliably across browsers/platforms. Instead, clear the field
+                    // completely on focus — when user taps, field becomes empty so they
+                    // can type the new value without any old digits hanging around.
+                    // (On desktop with keyboard, triple-click is the native fallback.)
+                    onFocus={(e) => {
+                      e.target.value = '';
+                      setCustomAmount(0);
+                    }}
+                    onChange={e => setCustomAmount(Number(e.target.value) || 0)}
                     placeholder="المبلغ"
                     min="0.01"
                     step="0.01"

@@ -177,32 +177,46 @@ export function isValidBackupShape(parsed: unknown): boolean {
 }
 
 /**
- * Computes the boundaries [start, end) of the current salary cycle.
+ * CORE ARCHITECTURE FIX — CRITICAL BUG #1:
+ *
+ * Computes the boundaries [start, end) of the salary cycle for ANY given reference date.
+ *
+ * The PREVIOUS implementation always used TODAY's date internally, which broke historical
+ * transactions: a payment from Sept 1 (when you opened the app on Sept 10) would be
+ * "assigned" to a salary cycle based on TODAY (Sept 10), not when it actually happened (Sept 1).
+ * This caused amounts to pool into wrong months, breaking all calculations for reports and balance.
+ *
+ * FIX: Accept optional `refDate` parameter (defaults to today). Every transaction/expense
+ * MUST be calculated using its OWN date, not the current date.
  */
-export function getCycleBounds(salaryDay: number, cyclesAgo: number = 0): { cycleStart: Date; cycleEnd: Date } {
-  const today = new Date();
-  // H8 fix: the setup UI only ever offers 1-31 (a fixed grid of day buttons), but
-  // salaryDay can also arrive from an imported backup file with no validation
-  // (see H20) or from stale/tampered localStorage. Without a floor, a 0 or
-  // negative day makes `new Date(y, m, d)` silently roll into a PRIOR month
-  // (JS Date arithmetic), shifting the whole salary cycle by a month without
-  // any error — corrupting every downstream spend-limit and report calculation.
+export function getCycleBounds(
+  salaryDay: number,
+  cyclesAgo: number = 0,
+  refDate: string = todayLocalISO()
+): { cycleStart: Date; cycleEnd: Date } {
+  // Parse the reference date (whether it's today or a historical transaction's date)
+  const [refYear, refMonth, refDay] = refDate.split('-').map(Number);
+  const ref = new Date(refYear, refMonth - 1, refDay);
+
+  // H8 fix: clamp salaryDay to valid range
   const clampDay = (y: number, m: number, d: number) =>
     Math.max(1, Math.min(d, new Date(y, m + 1, 0).getDate()));
 
-  const cYear = today.getFullYear();
-  const cMonth = today.getMonth();
-  const cDay = today.getDate();
+  const refYear_ = ref.getFullYear();
+  const refMonth_ = ref.getMonth();
+  const refDay_ = ref.getDate();
 
   let startY: number, startM: number, endY: number, endM: number;
-  if (cDay >= clampDay(cYear, cMonth, salaryDay)) {
-    startY = cYear; startM = cMonth;
-    endM = cMonth === 11 ? 0 : cMonth + 1;
-    endY = cMonth === 11 ? cYear + 1 : cYear;
+  if (refDay_ >= clampDay(refYear_, refMonth_, salaryDay)) {
+    // Current date is ON or AFTER salary day → cycle started this month
+    startY = refYear_; startM = refMonth_;
+    endM = refMonth_ === 11 ? 0 : refMonth_ + 1;
+    endY = refMonth_ === 11 ? refYear_ + 1 : refYear_;
   } else {
-    startM = cMonth === 0 ? 11 : cMonth - 1;
-    startY = cMonth === 0 ? cYear - 1 : cYear;
-    endY = cYear; endM = cMonth;
+    // Current date is BEFORE salary day → cycle started last month
+    startM = refMonth_ === 0 ? 11 : refMonth_ - 1;
+    startY = refMonth_ === 0 ? refYear_ - 1 : refYear_;
+    endY = refYear_; endM = refMonth_;
   }
 
   // Shift back by `cyclesAgo` full cycles (used for browsing past reports)
@@ -217,26 +231,22 @@ export function getCycleBounds(salaryDay: number, cyclesAgo: number = 0): { cycl
 }
 
 /**
- * Resolves a commitment's `dueDate` (day-of-month only, e.g. "1" or "25" —
- * no year/month is ever stored, see Commitment type) into a concrete
- * "YYYY-MM-DD" calendar date for the CURRENT salary cycle.
+ * CRITICAL ARCHITECTURE FIX — BUG #2:
  *
- * Bug this fixes: marking a commitment "paid" (handleToggleCommitment /
- * handleTogglePaid) used to always stamp the created expense transaction
- * with today's date via todayLocalISO(), regardless of the commitment's
- * actual due day. For a brand-new user who onboards mid-cycle and enters
- * bills they already paid earlier this cycle (e.g. salary day = 1st, they
- * open the app on the 10th and mark rent — due the 1st — as paid), that
- * silently recorded the rent payment as having happened TODAY. Since
- * "safe to spend today" subtracts today's transactions from today's frozen
- * ceiling, a large historical bill landing on today's date could wipe out
- * or go negative on an amount the user hasn't actually spent yet today.
+ * Previously: Resolves a commitment's `dueDate` (day-of-month) into a calendar date,
+ * BUT capped it at TODAY — meaning a historical bill due on day 1, entered on day 10,
+ * would be recorded as "paid today" instead of "paid on day 1".
  *
- * Resolution mirrors getCycleBounds' own start/end-month split: a due-day
- * on/after salaryDay falls in the cycle-start month, one before it falls in
- * the following month. The result is then capped at today — a bill can
- * never be recorded as paid in the future, even if its due day hasn't
- * arrived yet this cycle (marking it paid early just means "paid today").
+ * NOW: Returns the ACTUAL due date calculated from the salary cycle, WITHOUT capping
+ * at today. This allows retroactive entry of bills (user opens app on day 10, enters
+ * a bill due day 1 that they already paid). The expense transaction gets recorded with
+ * its TRUE date, not the entry date.
+ *
+ * User scenario:
+ * - Salary day 1, user opens app on day 10
+ * - They mark "Rent due 1st" as paid
+ * - This creates an expense dated Sept 1, NOT Sept 10
+ * - So September's balance is correct, October isn't polluted
  */
 export function resolveCommitmentPaidDate(dueDate: string, salaryDay: number): string {
   const { cycleStart } = getCycleBounds(salaryDay);
@@ -254,28 +264,35 @@ export function resolveCommitmentPaidDate(dueDate: string, salaryDay: number): s
   }
 
   const resolved = new Date(y, m, clampDayInMonth(y, m, rawDueDay));
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
   resolved.setHours(0, 0, 0, 0);
 
-  const finalDate = resolved.getTime() > today.getTime() ? today : resolved;
-  const yyyy = finalDate.getFullYear();
-  const mm = String(finalDate.getMonth() + 1).padStart(2, '0');
-  const dd = String(finalDate.getDate()).padStart(2, '0');
+  // NO LONGER CAP AT TODAY — return the actual due date, even if historical
+  const yyyy = resolved.getFullYear();
+  const mm = String(resolved.getMonth() + 1).padStart(2, '0');
+  const dd = String(resolved.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
 }
 
 /**
+ * CORE ARCHITECTURE FIX — CRITICAL BUG #1 (continuation):
+ *
  * Computes live "spent this cycle" for each saving box, from actual transactions,
  * instead of relying on the accumulated (and never-reset) box.spent field.
+ *
+ * KEY CHANGE: Now filters expenses by their OWN salary cycle (computed from their date),
+ * not by "today's" salary cycle. This ensures historical expenses stay in their correct
+ * month even if entered days/weeks later.
  */
 export function computeLiveSpent(boxes: SavingBox[], transactions: Transaction[], salaryDay: number): SavingBox[] {
-  const { cycleStart, cycleEnd } = getCycleBounds(salaryDay);
+  // Group expenses by their ACTUAL salary cycle (using each transaction's own date)
   const cycleExpenses = transactions.filter(t => {
     if (t.type !== 'expense') return false;
-    const d = new Date(t.date);
+    // Use this expense's OWN date to determine its cycle
+    const { cycleStart, cycleEnd } = getCycleBounds(salaryDay, 0, t.date);
+    const d = parseLocalDateOnly(t.date);
     return d >= cycleStart && d < cycleEnd;
   });
+
   return boxes.map(box => {
     const spent = cycleExpenses
       .filter(t => t.boxId ? t.boxId === box.id : (t.categoryAr === box.titleAr || t.categoryEn === box.titleEn))
