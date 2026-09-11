@@ -29,7 +29,7 @@ import {
   Car,
   ShoppingBag,
   X,
-  MessageCircle
+  Mail
 } from 'lucide-react';
 
 // Data and Types
@@ -814,12 +814,14 @@ export default function App() {
           {/* Inner Phone Screen Content */}
           <div id="phone-screen-container" className="flex-1 w-full h-full bg-[#030d0a] rounded-[42px] overflow-hidden flex flex-col relative z-10">
 
-            {/* PRELAUNCH-REVIEW: this whole welcome notice (including the
-                WhatsApp feedback link and phone number) describes the app's
-                current prototype/friend-testing state and will NOT
+            {/* PRELAUNCH-REVIEW: this whole welcome notice describes the
+                app's current prototype/friend-testing state and will NOT
                 auto-update. Before any real/public launch, search the
                 codebase for "PRELAUNCH-REVIEW" and update every match — see
-                the safespend_prelaunch_text_checklist doc. */}
+                the safespend_prelaunch_text_checklist doc. (The personal
+                WhatsApp number this notice used to link to was replaced
+                with a support email on 11 Sept 2026 — no longer a live
+                concern here, but the "prototype" framing itself still is.) */}
             {/* One-time "this is a prototype" welcome notice — shown the
                 first time the app is opened on a device, before the user
                 does anything else. Persisted separately from the app's own
@@ -853,18 +855,26 @@ export default function App() {
                       ? "لو لقيت أي خطأ أو عندك ملاحظة، تواصل معي مباشرة — رأيك يساعدني أطوّر التطبيق."
                       : "If you spot a bug or have feedback, reach out directly — your input helps shape the app."}
                   </p>
+                  {/* Standard-practice fix: this used to link straight to a
+                      personal WhatsApp number (wa.me/<number>), which is
+                      publicly visible/clickable to anyone who opens the
+                      page. Recognized practice for a beta/friend-testing
+                      feedback channel is a dedicated support email instead
+                      — doesn't expose a personal phone number, needs no
+                      business account, and works the same everywhere via a
+                      plain mailto: link. */}
                   <a
-                    href={`https://wa.me/966564917311?text=${encodeURIComponent(
+                    href={`mailto:safespend.feedback@gmail.com?subject=${encodeURIComponent(
+                      isAr ? 'ملاحظة على تطبيق SafeSpend' : 'SafeSpend feedback'
+                    )}&body=${encodeURIComponent(
                       isAr
-                        ? 'مرحباً خالد، عندي ملاحظة على تطبيق SafeSpend التجريبي: '
-                        : 'Hi Khalid, I have some feedback on the SafeSpend prototype: '
+                        ? 'مرحباً، عندي ملاحظة على تطبيق SafeSpend التجريبي: '
+                        : 'Hi, I have some feedback on the SafeSpend prototype: '
                     )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-1.5 py-2.5 w-full bg-[#25D366] hover:bg-[#20bd5a] text-[#062112] text-xs font-bold rounded-xl transition-all"
+                    className="flex items-center justify-center gap-1.5 py-2.5 w-full bg-emerald-500 hover:bg-emerald-400 text-[#030d0a] text-xs font-bold rounded-xl transition-all"
                   >
-                    <MessageCircle size={14} />
-                    {isAr ? "أرسل ملاحظة عبر واتساب" : "Send feedback on WhatsApp"}
+                    <Mail size={14} />
+                    {isAr ? "أرسل ملاحظة عبر البريد" : "Send feedback by email"}
                   </a>
                   <button
                     type="button"
@@ -945,32 +955,32 @@ export default function App() {
                 {isAr ? POSTER_SCREENS.find(s => s.id === activeScreen)?.labelAr : POSTER_SCREENS.find(s => s.id === activeScreen)?.labelEn}
               </div>
 
-              {/* PRELAUNCH-REVIEW: this "Feedback" WhatsApp link is deliberately
-                  placed here — the one persistent header rendered on every
-                  single screen, unlike the Help Center which needs
-                  navigation — so it stays obvious and one-tap the whole time
-                  a friend is testing the app. Remove this button (and the
-                  number) before any real/public launch — see the
-                  safespend_prelaunch_text_checklist doc. It also replaces
-                  the previous empty spacer, so it keeps the screen title
-                  visually centered. */}
-              {/* M: solid WhatsApp-green fill instead of the earlier pale
-                  translucent tint — the tint read as "just another green
-                  button" next to the app's existing translucent-emerald
-                  "Screens" button, per explicit feedback that it needed to
-                  look clearly different/distinct, not blend in. */}
+              {/* This "Feedback" link is deliberately placed here — the one
+                  persistent header rendered on every single screen, unlike
+                  the Help Center which needs navigation — so it stays
+                  obvious and one-tap the whole time a friend is testing the
+                  app. It also replaces the previous empty spacer, so it
+                  keeps the screen title visually centered.
+                  PRELAUNCH-REVIEW resolved (11 Sept 2026): was a direct link
+                  to a personal WhatsApp number, publicly clickable to
+                  anyone who opened the page — swapped for a dedicated
+                  support email (mailto:), the recognized standard for a
+                  beta feedback channel that doesn't expose a personal phone
+                  number. Still worth a look before any real/public launch
+                  (e.g. moving to a proper ticketing inbox), but no longer a
+                  privacy exposure — see safespend_prelaunch_text_checklist. */}
               <a
-                href={`https://wa.me/966564917311?text=${encodeURIComponent(
+                href={`mailto:safespend.feedback@gmail.com?subject=${encodeURIComponent(
+                  isAr ? 'ملاحظة على تطبيق SafeSpend' : 'SafeSpend feedback'
+                )}&body=${encodeURIComponent(
                   isAr
-                    ? 'مرحباً خالد، عندي ملاحظة على تطبيق SafeSpend التجريبي: '
-                    : 'Hi Khalid, I have some feedback on the SafeSpend prototype: '
+                    ? 'مرحباً، عندي ملاحظة على تطبيق SafeSpend التجريبي: '
+                    : 'Hi, I have some feedback on the SafeSpend prototype: '
                 )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`flex items-center gap-1 px-2.5 py-1.5 bg-[#25D366] hover:bg-[#20bd5a] rounded-xl text-[#062112] transition-all cursor-pointer font-bold shadow-sm ${isAr ? 'flex-row-reverse' : 'flex-row'}`}
+                className={`flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 rounded-xl text-[#030d0a] transition-all cursor-pointer font-bold shadow-sm ${isAr ? 'flex-row-reverse' : 'flex-row'}`}
                 title={isAr ? "أرسل ملاحظاتك" : "Send feedback"}
               >
-                <MessageCircle size={12} className="stroke-[2.5]" />
+                <Mail size={12} className="stroke-[2.5]" />
                 <span className="text-[9px] font-extrabold whitespace-nowrap">
                   {isAr ? "ملاحظات" : "Feedback"}
                 </span>
