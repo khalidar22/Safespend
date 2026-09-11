@@ -55,6 +55,7 @@ import {
   INITIAL_FAMILY_MEMBERS
 } from './mockData';
 import { formatMoney, computeLiveSpent, getCycleBounds, sumAmounts, todayLocalISO } from './utils';
+import { loadAppState, saveAppState } from './storage';
 
 // Modular Screen Components
 import { DashboardScreen } from './components/DashboardScreen';
@@ -65,26 +66,12 @@ import { ExpenseAndLeakageScreens } from './components/ExpenseAndLeakageScreens'
 import { ManagementScreens } from './components/ManagementScreens';
 
 export default function App() {
-  // Helper to load state from safespend-v1
-  const getSavedState = () => {
-    if (typeof window === 'undefined') return null;
-    // C10 fix: localStorage.getItem itself can throw (private/incognito browsing,
-    // an iframe with storage blocked, or strict privacy settings that disable
-    // Storage entirely) — not just JSON.parse. The old code only guarded the
-    // parse step, so a throwing getItem crashed the whole app to a blank white
-    // screen on first load (there is no Error Boundary — see C12). Now the
-    // access itself is inside the try too.
-    try {
-      const data = localStorage.getItem('safespend-v1');
-      if (!data) return null;
-      return JSON.parse(data);
-    } catch (e) {
-      console.error("Error reading saved state", e);
-      return null;
-    }
-  };
-
-  const savedState = getSavedState();
+  // Load/save logic now lives in src/storage.ts (Phase 1 of the optional
+  // cloud-sync groundwork — see claude/safespend_sync_implementation_plan.md
+  // in the "الخبراء" project). Behavior here is unchanged: this still reads
+  // only from localStorage. storage.ts is the single seam a future opt-in
+  // Supabase sync will hook into later, without touching this file again.
+  const savedState = loadAppState();
 
   // دالة ترحيل مشتركة: تملأ boxId للعمليات التي لا تحمله.
   // إضافية بحتة ومُتكرِّرة بأمان — تتخطى ما يحمل boxId أصلاً وما ليس مصروفاً.
@@ -312,11 +299,7 @@ export default function App() {
     // years of transaction history, or a private-browsing quota of 0 — used to
     // throw here uncaught and crash the whole app to a blank white screen (no
     // Error Boundary — see C12) on literally the next user action.
-    try {
-      localStorage.setItem('safespend-v1', JSON.stringify(stateToSave));
-    } catch (e) {
-      console.error("Error auto-saving state", e);
-    }
+    saveAppState(stateToSave);
   }, [
     lang,
     currency,
@@ -380,7 +363,7 @@ export default function App() {
           frozenWithSalary,
           freezeMethodVersion,
         };
-        localStorage.setItem('safespend-v1', JSON.stringify(stateToSave));
+        saveAppState(stateToSave);
       } catch (e) {
         // Silently fail if storage is unavailable
       }
