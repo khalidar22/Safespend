@@ -47,6 +47,8 @@ import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, project
 import { CURRENCIES, getCurrency } from '../currencies';
 import { getProvidersForCurrency, getProvider } from '../bnplProviders';
 import { supabase } from '../supabaseClient';
+import { loadAppState } from '../storage';
+import { pushNow } from '../syncEngine';
 
 interface ManagementScreensProps {
   screenId: ScreenId;
@@ -146,23 +148,41 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   const [tempUserEmail, setTempUserEmail] = useState<string>(userEmail);
   const [profileSaveSuccess, setProfileSaveSuccess] = useState<boolean>(false);
 
-  // Phase 3 — optional cloud sync (opt-in, see supabaseClient.ts and
+  // Optional cloud sync (opt-in, see supabaseClient.ts and
   // claude/safespend_sync_implementation_plan.md in the "الخبراء" project).
-  // This section ONLY sends/receives a Supabase Auth magic-link email — it
-  // does not read or write any app data yet (that's Phase 4). A user who
-  // never opens/uses this section sees zero change in behavior.
+  // Phase 3 built the magic-link sign-in flow below. Phase 4 (this) adds
+  // the actual data sync: syncUploadStatus tracks the one-time "upload
+  // what's on this device" push that fires right after a successful
+  // sign-in (see the onAuthStateChange listener below) — after that,
+  // storage.ts pushes every subsequent local save in the background on
+  // its own, silently. A user who never opens/uses this section sees zero
+  // change in behavior.
   const [syncEmail, setSyncEmail] = useState<string>('');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [syncErrorMsg, setSyncErrorMsg] = useState<string>('');
   const [syncSession, setSyncSession] = useState<any>(null);
+  const [syncUploadStatus, setSyncUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
 
   useEffect(() => {
     let isMounted = true;
     supabase.auth.getSession().then(({ data }) => {
       if (isMounted) setSyncSession(data.session ?? null);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (isMounted) setSyncSession(session);
+      // Phase 4 "first activation": right when a sign-in actually completes
+      // (not on every token refresh / tab reload), upload whatever is
+      // currently saved on THIS device so it isn't left behind. Every
+      // save after this point is picked up automatically by storage.ts.
+      if (event === 'SIGNED_IN' && session) {
+        const localState = loadAppState();
+        if (localState) {
+          setSyncUploadStatus('uploading');
+          pushNow(localState).then((result) => {
+            if (isMounted) setSyncUploadStatus(result.ok ? 'success' : 'error');
+          });
+        }
+      }
     });
     return () => {
       isMounted = false;
@@ -2644,10 +2664,28 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                     ? `مسجّل دخول بالبريد: ${syncSession.user?.email ?? ''}`
                     : `Signed in as: ${syncSession.user?.email ?? ''}`}
                 </p>
+                {syncUploadStatus === 'uploading' && (
+                  <p className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                    <Loader2 size={11} className="animate-spin" />
+                    {isAr ? "جارٍ رفع بياناتك إلى السحابة..." : "Uploading your data to the cloud..."}
+                  </p>
+                )}
+                {syncUploadStatus === 'success' && (
+                  <p className="flex items-center gap-1.5 text-[10px] text-emerald-400">
+                    <CheckCircle size={11} />
+                    {isAr ? "تمت مزامنة بياناتك مع السحابة." : "Your data is synced to the cloud."}
+                  </p>
+                )}
+                {syncUploadStatus === 'error' && (
+                  <p className="flex items-center gap-1.5 text-[10px] text-red-400">
+                    <AlertTriangle size={11} />
+                    {isAr ? "تعذّرت مزامنة بياناتك — سيُعاد المحاولة تلقائياً." : "Couldn't sync your data — it will retry automatically."}
+                  </p>
+                )}
                 <p className="text-[10px] text-slate-500">
                   {isAr
-                    ? "ملاحظة: تسجيل الدخول مفعّل فقط — رفع بياناتك الفعلي للسحابة ميزة قادمة ولم تُفعّل بعد."
-                    : "Note: sign-in is active only — actually syncing your data to the cloud is a coming feature, not yet enabled."}
+                    ? "بياناتك تُرفع تلقائياً للسحابة في الخلفية كلما حدّثت شيئاً في التطبيق (مزامنة اتجاه واحد من هذا الجهاز حالياً)."
+                    : "Your data uploads to the cloud automatically in the background whenever you update something in the app (one-way sync from this device for now)."}
                 </p>
                 <button
                   type="button"

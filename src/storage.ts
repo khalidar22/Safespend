@@ -1,18 +1,22 @@
 // SafeSpend — local storage access layer.
 //
 // This is the single place the app reads and writes its persisted state.
-// Today it only talks to localStorage, and behavior is byte-for-byte
-// identical to the inline code in App.tsx it replaced. It exists as a
-// deliberate seam: Phase 1 of the optional cloud-sync groundwork
-// (claude/safespend_sync_implementation_plan.md in the "الخبراء" project).
-// A later phase will extend saveAppState() to also push changes to Supabase
-// in the background ONLY when a user has explicitly opted in to cloud sync
-// — nothing here changes that opt-in default, and localStorage stays the
-// source of truth for anyone who never turns sync on.
+// localStorage remains the source of truth for every user, including
+// those who opt in to cloud sync — saveAppState() below still writes to
+// localStorage FIRST, unconditionally, exactly as before.
+//
+// Phase 4 (claude/safespend_sync_implementation_plan.md in the "الخبراء"
+// project) added one addition: after the local write, saveAppState() also
+// tells syncEngine.ts about the new state via schedulePush(). That call is
+// a silent no-op unless the user has an active Supabase Auth session (see
+// ManagementScreens.tsx's "Cloud Sync" card) — someone who never opens
+// that card or never signs in sees zero behavior change here.
 //
 // Do not add new localStorage.getItem/setItem('safespend-v1', ...) calls
 // elsewhere in the app — always go through loadAppState()/saveAppState() so
-// there is exactly one place to extend later.
+// there is exactly one place this is wired to cloud sync.
+
+import { schedulePush } from './syncEngine';
 
 const STORAGE_KEY = 'safespend-v1';
 
@@ -43,4 +47,7 @@ export function saveAppState(state: Record<string, unknown>): void {
   } catch (e) {
     console.error("Error auto-saving state", e);
   }
+  // Phase 4: background cloud push (no-op unless sync is enabled — see
+  // syncEngine.ts's file header for the full behavior).
+  schedulePush(state);
 }
