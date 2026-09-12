@@ -1,17 +1,17 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  ArrowLeft, 
-  ArrowRight, 
-  Plus, 
-  Check, 
-  Shield, 
-  Settings, 
-  Users, 
-  TrendingUp, 
-  CreditCard, 
-  Calendar, 
-  Award, 
-  Lock, 
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Plus,
+  Check,
+  Shield,
+  Settings,
+  Users,
+  TrendingUp,
+  CreditCard,
+  Calendar,
+  Award,
+  Lock,
   HelpCircle,
   PiggyBank,
   ChevronRight,
@@ -26,7 +26,10 @@ import {
   CheckCircle,
   Trash2,
   AlertTriangle,
-  Share2
+  Share2,
+  Cloud,
+  Loader2,
+  LogOut
 } from 'lucide-react';
 import {
   AppLanguage,
@@ -43,6 +46,7 @@ import {
 import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, projectBnplRatio, getZakatEstimate, computeEqualSplit, getTotalOwedToUser, buildSplitShareText, createDemoLinkedAccount, getLinkedAccountsTotal, createDemoKidsCard, todayLocalISO, isValidBackupShape, sortCommitmentsByDueProximity, resolveCommitmentPaidDate } from '../utils';
 import { CURRENCIES, getCurrency } from '../currencies';
 import { getProvidersForCurrency, getProvider } from '../bnplProviders';
+import { supabase } from '../supabaseClient';
 
 interface ManagementScreensProps {
   screenId: ScreenId;
@@ -141,6 +145,64 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   const [tempUserName, setTempUserName] = useState<string>(userName);
   const [tempUserEmail, setTempUserEmail] = useState<string>(userEmail);
   const [profileSaveSuccess, setProfileSaveSuccess] = useState<boolean>(false);
+
+  // Phase 3 — optional cloud sync (opt-in, see supabaseClient.ts and
+  // claude/safespend_sync_implementation_plan.md in the "الخبراء" project).
+  // This section ONLY sends/receives a Supabase Auth magic-link email — it
+  // does not read or write any app data yet (that's Phase 4). A user who
+  // never opens/uses this section sees zero change in behavior.
+  const [syncEmail, setSyncEmail] = useState<string>('');
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [syncErrorMsg, setSyncErrorMsg] = useState<string>('');
+  const [syncSession, setSyncSession] = useState<any>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (isMounted) setSyncSession(data.session ?? null);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (isMounted) setSyncSession(session);
+    });
+    return () => {
+      isMounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleSendMagicLink = async () => {
+    const trimmedEmail = syncEmail.trim();
+    if (!trimmedEmail || !trimmedEmail.includes('@')) {
+      setSyncStatus('error');
+      setSyncErrorMsg(isAr ? 'الرجاء إدخال بريد إلكتروني صحيح' : 'Please enter a valid email address');
+      return;
+    }
+    setSyncStatus('sending');
+    setSyncErrorMsg('');
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: trimmedEmail,
+        options: { emailRedirectTo: window.location.href },
+      });
+      if (error) {
+        setSyncStatus('error');
+        setSyncErrorMsg(error.message);
+      } else {
+        setSyncStatus('sent');
+      }
+    } catch (e: any) {
+      setSyncStatus('error');
+      setSyncErrorMsg(e?.message || (isAr ? 'حدث خطأ غير متوقع، حاول مرة أخرى' : 'An unexpected error occurred, please try again'));
+    }
+  };
+
+  const handleSyncSignOut = async () => {
+    await supabase.auth.signOut();
+    setSyncSession(null);
+    setSyncStatus('idle');
+    setSyncEmail('');
+    setSyncErrorMsg('');
+  };
 
   // Currency selection states
   const [showCurrencyPicker, setShowCurrencyPicker] = useState<boolean>(false);
@@ -2560,6 +2622,106 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                 {zakatFeatureEnabled ? (isAr ? "مفعّلة" : "On") : (isAr ? "متوقفة" : "Off")}
               </button>
             </div>
+          </div>
+
+          {/* Section 2: Optional Cloud Sync (Phase 3 — opt-in, see
+              claude/safespend_sync_implementation_plan.md in the "الخبراء"
+              project). Nothing here touches app data; it only manages a
+              Supabase Auth session via magic-link email. A user who never
+              opens this card keeps using localStorage exactly as before. */}
+          <div className="bg-[#051613] rounded-2xl border border-emerald-950 p-4 flex flex-col gap-3 text-xs">
+            <div className="flex items-center gap-1.5">
+              <Cloud size={13} className="text-emerald-500" />
+              <h4 className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
+                {isAr ? "المزامنة السحابية (اختياري)" : "Cloud Sync (Optional)"}
+              </h4>
+            </div>
+
+            {syncSession ? (
+              <>
+                <p className="text-slate-300">
+                  {isAr
+                    ? `مسجّل دخول بالبريد: ${syncSession.user?.email ?? ''}`
+                    : `Signed in as: ${syncSession.user?.email ?? ''}`}
+                </p>
+                <p className="text-[10px] text-slate-500">
+                  {isAr
+                    ? "ملاحظة: تسجيل الدخول مفعّل فقط — رفع بياناتك الفعلي للسحابة ميزة قادمة ولم تُفعّل بعد."
+                    : "Note: sign-in is active only — actually syncing your data to the cloud is a coming feature, not yet enabled."}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleSyncSignOut}
+                  className="flex items-center justify-center gap-1.5 w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition-all"
+                >
+                  <LogOut size={13} />
+                  <span>{isAr ? "تسجيل الخروج" : "Sign Out"}</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-slate-400">
+                  {isAr
+                    ? "فعّل المزامنة عشان توصل بياناتك من أكثر من جهاز لاحقاً. بياناتك تبقى محفوظة على جهازك كما هي دائماً — هذا خيار إضافي فقط، وتقدر توقفه بأي وقت."
+                    : "Enable sync so your data can reach more than one device later. Your data always stays saved on this device too — this is an extra opt-in option you can turn off anytime."}
+                </p>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-slate-300 font-bold flex items-center gap-1.5 text-[11px]">
+                    <Mail size={12} className="text-emerald-500" />
+                    {isAr ? "البريد الإلكتروني" : "Email Address"}
+                  </label>
+                  <input
+                    type="email"
+                    value={syncEmail}
+                    onChange={(e) => {
+                      setSyncEmail(e.target.value);
+                      if (syncStatus === 'error') setSyncStatus('idle');
+                    }}
+                    placeholder="email@example.com"
+                    disabled={syncStatus === 'sending' || syncStatus === 'sent'}
+                    className="bg-[#030d0a] border border-emerald-950/80 px-3.5 py-2.5 text-xs rounded-xl text-white w-full focus:outline-none focus:border-emerald-500/50 transition-all font-medium font-mono placeholder-slate-600 disabled:opacity-50"
+                  />
+                </div>
+
+                {syncStatus === 'error' && (
+                  <div className="flex items-start gap-1.5 text-red-400 text-[10px]">
+                    <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                    <span>{syncErrorMsg}</span>
+                  </div>
+                )}
+
+                {syncStatus === 'sent' ? (
+                  <div className="flex items-start gap-1.5 text-emerald-400 text-[10px] bg-emerald-950/40 rounded-xl p-2.5">
+                    <CheckCircle size={13} className="shrink-0 mt-0.5" />
+                    <span>
+                      {isAr
+                        ? "تم إرسال رابط الدخول! افتح بريدك واضغط الرابط لإتمام تسجيل الدخول."
+                        : "Magic link sent! Check your email and tap the link to finish signing in."}
+                    </span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleSendMagicLink}
+                    disabled={syncStatus === 'sending'}
+                    className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 text-[#030d0a] font-extrabold text-xs transition-all duration-200 shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    {syncStatus === 'sending' ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>{isAr ? "جاري الإرسال..." : "Sending..."}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Cloud size={14} className="stroke-[2.5]" />
+                        <span>{isAr ? "تفعيل المزامنة السحابية" : "Enable Cloud Sync"}</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </>
+            )}
           </div>
 
           {/* Section 3: SafeSpend Support */}
