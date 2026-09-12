@@ -158,32 +158,56 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   // its own, silently. A user who never opens/uses this section sees zero
   // change in behavior.
   const [syncEmail, setSyncEmail] = useState<string>('');
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'sending' | 'sent' | 'verifying' | 'error'>('idle');
   const [syncErrorMsg, setSyncErrorMsg] = useState<string>('');
   const [syncSession, setSyncSession] = useState<any>(null);
   const [syncUploadStatus, setSyncUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  // 6-digit code the user types in from the sign-in email. This replaced the
+  // original magic-LINK flow: on mobile the link opened a brand-new browser
+  // tab every time (they piled up), and Gmail collapsed each repeat email's
+  // body behind a "..." because every magic-link email is near-identical, so
+  // the link was effectively hidden. A code is typed straight into the app —
+  // no new tab, nothing to collapse. Requires the Supabase "Magic Link"
+  // email template to emit {{ .Token }} instead of {{ .ConfirmationURL }}.
+  const [syncCode, setSyncCode] = useState<string>('');
 
   useEffect(() => {
     let isMounted = true;
+
+    // Uploads whatever is saved locally right now. Safe to call more than
+    // once — it's an upsert on the user's single app_state row.
+    const uploadLocalState = () => {
+      const localState = loadAppState();
+      if (!localState) return;
+      setSyncUploadStatus('uploading');
+      pushNow(localState).then((result) => {
+        if (isMounted) setSyncUploadStatus(result.ok ? 'success' : 'error');
+      });
+    };
+
     supabase.auth.getSession().then(({ data }) => {
-      if (isMounted) setSyncSession(data.session ?? null);
+      if (!isMounted) return;
+      setSyncSession(data.session ?? null);
+      // Also sync on mount when a session already exists. Without this, a
+      // user who signed in while some OTHER screen was open would never see
+      // a sync confirmation here (this component — and its SIGNED_IN
+      // listener below — only exists while the Settings screen is open).
+      if (data.session) uploadLocalState();
     });
+
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (isMounted) setSyncSession(session);
-      // Phase 4 "first activation": right when a sign-in actually completes
-      // (not on every token refresh / tab reload), upload whatever is
-      // currently saved on THIS device so it isn't left behind. Every
-      // save after this point is picked up automatically by storage.ts.
-      if (event === 'SIGNED_IN' && session) {
-        const localState = loadAppState();
-        if (localState) {
-          setSyncUploadStatus('uploading');
-          pushNow(localState).then((result) => {
-            if (isMounted) setSyncUploadStatus(result.ok ? 'success' : 'error');
-          });
-        }
+      // "First activation": right when a sign-in actually completes (not on
+      // every token refresh), upload whatever is currently saved on THIS
+      // device so it isn't left behind. Every save after this point is
+      // picked up automatically by storage.ts.
+      if (event === 'SIGNED_IN' && session && isMounted) {
+        setSyncCode('');
+        setSyncStatus('idle');
+        uploadLocalState();
       }
     });
+
     return () => {
       isMounted = false;
       listener.subscription.unsubscribe();
@@ -199,6 +223,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     }
     setSyncStatus('sending');
     setSyncErrorMsg('');
+    setSyncCode('');
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: trimmedEmail,
@@ -216,12 +241,53 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     }
   };
 
+  // Second half of the code flow: the user types the 6 digits from the email
+  // and we exchange them for a real session. A success here fires
+  // onAuthStateChange('SIGNED_IN'), which is what triggers the first upload.
+  const handleVerifyCode = async () => {
+    const code = syncCode.replace(/\D/g, '');
+    if (code.length !== 6) {
+      setSyncStatus('error');
+      setSyncErrorMsg(isAr ? 'الرمز يجب أن يكون 6 أرقام' : 'The code must be 6 digits');
+      return;
+    }
+    setSyncStatus('verifying');
+    setSyncErrorMsg('');
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email: syncEmail.trim(),
+        token: code,
+        type: 'email',
+      });
+      if (error) {
+        setSyncStatus('sent'); // stay on the code step so they can retry
+        setSyncErrorMsg(isAr
+          ? 'الرمز غير صحيح أو انتهت صلاحيته. تأكد من آخر رسالة وصلتك، أو اطلب رمزاً جديداً.'
+          : 'That code is wrong or expired. Check the most recent email, or request a new code.');
+      }
+      // On success we deliberately do nothing here — the auth listener above
+      // takes over (clears the code, starts the upload, flips the card to
+      // the signed-in state).
+    } catch (e: any) {
+      setSyncStatus('sent');
+      setSyncErrorMsg(e?.message || (isAr ? 'حدث خطأ غير متوقع، حاول مرة أخرى' : 'An unexpected error occurred, please try again'));
+    }
+  };
+
+  const handleSyncCancelCode = () => {
+    setSyncStatus('idle');
+    setSyncCode('');
+    setSyncErrorMsg('');
+  };
+
   const handleSyncSignOut = async () => {
     await supabase.auth.signOut();
     setSyncSession(null);
     setSyncStatus('idle');
     setSyncEmail('');
+    setSyncCode('');
     setSyncErrorMsg('');
+    setSyncUploadStatus('idle');
   };
 
   // Currency selection states
@@ -2717,27 +2783,72 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                       if (syncStatus === 'error') setSyncStatus('idle');
                     }}
                     placeholder="email@example.com"
-                    disabled={syncStatus === 'sending' || syncStatus === 'sent'}
+                    disabled={syncStatus === 'sending' || syncStatus === 'sent' || syncStatus === 'verifying'}
                     className="bg-[#030d0a] border border-emerald-950/80 px-3.5 py-2.5 text-xs rounded-xl text-white w-full focus:outline-none focus:border-emerald-500/50 transition-all font-medium font-mono placeholder-slate-600 disabled:opacity-50"
                   />
                 </div>
 
-                {syncStatus === 'error' && (
+                {syncErrorMsg && (
                   <div className="flex items-start gap-1.5 text-red-400 text-[10px]">
                     <AlertTriangle size={12} className="shrink-0 mt-0.5" />
                     <span>{syncErrorMsg}</span>
                   </div>
                 )}
 
-                {syncStatus === 'sent' ? (
-                  <div className="flex items-start gap-1.5 text-emerald-400 text-[10px] bg-emerald-950/40 rounded-xl p-2.5">
-                    <CheckCircle size={13} className="shrink-0 mt-0.5" />
-                    <span>
-                      {isAr
-                        ? "تم إرسال رابط الدخول! افتح بريدك واضغط الرابط لإتمام تسجيل الدخول."
-                        : "Magic link sent! Check your email and tap the link to finish signing in."}
-                    </span>
-                  </div>
+                {(syncStatus === 'sent' || syncStatus === 'verifying') ? (
+                  <>
+                    <div className="flex items-start gap-1.5 text-emerald-400 text-[10px] bg-emerald-950/40 rounded-xl p-2.5">
+                      <CheckCircle size={13} className="shrink-0 mt-0.5" />
+                      <span>
+                        {isAr
+                          ? "أرسلنا لك رمزاً من 6 أرقام على بريدك. افتح الرسالة واكتب الرمز هنا."
+                          : "We sent a 6-digit code to your email. Open the message and type the code here."}
+                      </span>
+                    </div>
+
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      value={syncCode}
+                      onChange={(e) => {
+                        setSyncCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                        if (syncErrorMsg) setSyncErrorMsg('');
+                      }}
+                      placeholder="000000"
+                      maxLength={6}
+                      disabled={syncStatus === 'verifying'}
+                      className="bg-[#030d0a] border border-emerald-950/80 px-3.5 py-2.5 text-lg rounded-xl text-white w-full text-center focus:outline-none focus:border-emerald-500/50 transition-all font-bold font-mono tracking-[0.5em] placeholder-slate-700 disabled:opacity-50"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={handleVerifyCode}
+                      disabled={syncStatus === 'verifying' || syncCode.length !== 6}
+                      className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-[#030d0a] font-extrabold text-xs transition-all duration-200 shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      {syncStatus === 'verifying' ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          <span>{isAr ? "جاري التحقق..." : "Verifying..."}</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check size={14} className="stroke-[2.5]" />
+                          <span>{isAr ? "تأكيد الرمز" : "Confirm Code"}</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSyncCancelCode}
+                      disabled={syncStatus === 'verifying'}
+                      className="w-full py-2 rounded-xl bg-transparent text-slate-400 hover:text-slate-200 font-bold text-[10px] transition-all disabled:opacity-40"
+                    >
+                      {isAr ? "تغيير البريد أو إرسال رمز جديد" : "Change email or send a new code"}
+                    </button>
+                  </>
                 ) : (
                   <button
                     type="button"
