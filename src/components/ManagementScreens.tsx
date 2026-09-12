@@ -246,9 +246,13 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   // onAuthStateChange('SIGNED_IN'), which is what triggers the first upload.
   const handleVerifyCode = async () => {
     const code = syncCode.replace(/\D/g, '');
-    if (code.length !== 6) {
+    // Supabase's email OTP length is a dashboard setting (6-10 digits), not
+    // something the client controls — it was found set to 8 here while this
+    // screen assumed 6. Accept the whole supported range instead of pinning
+    // one length, so changing that setting can never break sign-in again.
+    if (code.length < 6) {
       setSyncStatus('error');
-      setSyncErrorMsg(isAr ? 'الرمز يجب أن يكون 6 أرقام' : 'The code must be 6 digits');
+      setSyncErrorMsg(isAr ? 'الرمز غير مكتمل — أدخل الرمز كاملاً كما وصلك بالبريد' : 'Code incomplete — enter the full code exactly as emailed');
       return;
     }
     setSyncStatus('verifying');
@@ -2812,11 +2816,11 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                       autoComplete="one-time-code"
                       value={syncCode}
                       onChange={(e) => {
-                        setSyncCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                        setSyncCode(e.target.value.replace(/\D/g, '').slice(0, 10));
                         if (syncErrorMsg) setSyncErrorMsg('');
                       }}
                       placeholder="000000"
-                      maxLength={6}
+                      maxLength={10}
                       disabled={syncStatus === 'verifying'}
                       className="bg-[#030d0a] border border-emerald-950/80 px-3.5 py-2.5 text-lg rounded-xl text-white w-full text-center focus:outline-none focus:border-emerald-500/50 transition-all font-bold font-mono tracking-[0.5em] placeholder-slate-700 disabled:opacity-50"
                     />
@@ -2824,7 +2828,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                     <button
                       type="button"
                       onClick={handleVerifyCode}
-                      disabled={syncStatus === 'verifying' || syncCode.length !== 6}
+                      disabled={syncStatus === 'verifying' || syncCode.length < 6}
                       className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-[#030d0a] font-extrabold text-xs transition-all duration-200 shadow-lg shadow-emerald-500/10 flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       {syncStatus === 'verifying' ? (
