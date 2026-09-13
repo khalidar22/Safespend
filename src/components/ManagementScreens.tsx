@@ -47,8 +47,30 @@ import { formatMoney, getCycleBounds, sumAmounts, getBnplGuardianStatus, project
 import { CURRENCIES, getCurrency } from '../currencies';
 import { getProvidersForCurrency, getProvider } from '../bnplProviders';
 import { supabase } from '../supabaseClient';
-import { loadAppState } from '../storage';
-import { pushNow } from '../syncEngine';
+import { loadAppState, saveConflictBackup, loadConflictBackup, clearConflictBackup } from '../storage';
+import type { ConflictBackup } from '../storage';
+import { pushNow, pullState, pauseSync, resumeSync } from '../syncEngine';
+
+// Phase 5 helper — "does this copy hold real user activity?"
+//
+// Deliberately counts ONLY the four collections that start out empty on a
+// brand-new install (transactions, installments, family members, bill
+// splits). Commitments, goals and saving boxes ship pre-filled with
+// defaults, so counting those would flag every fresh device as "has data"
+// and pop a conflict prompt at every single second-device sign-in.
+const ACTIVITY_KEYS = ['transactions', 'installments', 'familyMembers', 'billSplits'] as const;
+
+function countActivity(state: any): number {
+  if (!state || typeof state !== 'object') return 0;
+  return ACTIVITY_KEYS.reduce(
+    (total, key) => total + (Array.isArray(state[key]) ? state[key].length : 0),
+    0,
+  );
+}
+
+function hasRecordedActivity(state: any): boolean {
+  return countActivity(state) > 0;
+}
 
 interface ManagementScreensProps {
   screenId: ScreenId;
@@ -161,7 +183,14 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   const [syncStatus, setSyncStatus] = useState<'idle' | 'sending' | 'sent' | 'verifying' | 'error'>('idle');
   const [syncErrorMsg, setSyncErrorMsg] = useState<string>('');
   const [syncSession, setSyncSession] = useState<any>(null);
-  const [syncUploadStatus, setSyncUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [syncUploadStatus, setSyncUploadStatus] = useState<'idle' | 'checking' | 'uploading' | 'success' | 'pulled' | 'conflict' | 'error'>('idle');
+  // Phase 5: set only when BOTH this device and the cloud hold real user
+  // activity and the user must pick one. Nothing is written either way until
+  // they do — see reconcileWithCloud() below.
+  const [cloudConflict, setCloudConflict] = useState<{ state: any; updatedAt: string | null } | null>(null);
+  // The snapshot of whichever copy was replaced by a past conflict decision.
+  // Kept until the user restores it or explicitly discards it.
+  const [savedBackup, setSavedBackup] = useState<ConflictBackup | null>(() => loadConflictBackup());
   // 6-digit code the user types in from the sign-in email. This replaced the
   // original magic-LINK flow: on mobile the link opened a brand-new browser
   // tab every time (they piled up), and Gmail collapsed each repeat email's
@@ -174,37 +203,78 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   useEffect(() => {
     let isMounted = true;
 
-    // Uploads whatever is saved locally right now. Safe to call more than
-    // once — it's an upsert on the user's single app_state row.
-    const uploadLocalState = () => {
+    // Phase 5 — reconcile this device with the cloud copy.
+    //
+    // Order matters: we PULL FIRST, then decide, then push. Phase 4 pushed
+    // immediately on sign-in, which meant a freshly-installed second device
+    // would overwrite the account's real data with its own empty state
+    // before anyone could object (exactly what happened in testing on
+    // 13 Sep 2026). Nothing is written to either side until the outcome is
+    // unambiguous, or until the user picks one.
+    //
+    // Three outcomes:
+    //   • cloud empty          -> push this device up (nothing to lose)
+    //   • cloud has data, this device has no recorded activity
+    //                          -> pull the cloud down automatically
+    //   • both have real data  -> STOP and ask. Never merge, never guess.
+    const reconcileWithCloud = async () => {
       const localState = loadAppState();
-      if (!localState) return;
-      setSyncUploadStatus('uploading');
-      pushNow(localState).then((result) => {
-        if (isMounted) setSyncUploadStatus(result.ok ? 'success' : 'error');
-      });
+      pauseSync();
+      setSyncUploadStatus('checking');
+
+      const result = await pullState();
+      if (!isMounted) { resumeSync(); return; }
+
+      if (!result.ok) {
+        resumeSync();
+        setSyncUploadStatus('error');
+        return;
+      }
+
+      const cloudHasData = result.state && hasRecordedActivity(result.state);
+      const localHasData = localState && hasRecordedActivity(localState);
+
+      if (cloudHasData && localHasData) {
+        setCloudConflict({ state: result.state, updatedAt: result.updatedAt });
+        setSyncUploadStatus('conflict');
+        return; // stay paused — no writes until the user chooses
+      }
+
+      if (cloudHasData) {
+        // This device has nothing of its own to lose: take the cloud copy.
+        onImportState(result.state);
+        resumeSync();
+        setSyncUploadStatus('pulled');
+        return;
+      }
+
+      resumeSync();
+      if (localState) {
+        setSyncUploadStatus('uploading');
+        pushNow(localState).then((r) => {
+          if (isMounted) setSyncUploadStatus(r.ok ? 'success' : 'error');
+        });
+      } else {
+        setSyncUploadStatus('idle');
+      }
     };
 
     supabase.auth.getSession().then(({ data }) => {
       if (!isMounted) return;
       setSyncSession(data.session ?? null);
-      // Also sync on mount when a session already exists. Without this, a
-      // user who signed in while some OTHER screen was open would never see
-      // a sync confirmation here (this component — and its SIGNED_IN
-      // listener below — only exists while the Settings screen is open).
-      if (data.session) uploadLocalState();
+      // Also reconcile on mount when a session already exists. Without this,
+      // a user who signed in while some OTHER screen was open would never
+      // see a sync result here (this component — and its SIGNED_IN listener
+      // below — only exists while the Settings screen is open).
+      if (data.session) reconcileWithCloud();
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (isMounted) setSyncSession(session);
-      // "First activation": right when a sign-in actually completes (not on
-      // every token refresh), upload whatever is currently saved on THIS
-      // device so it isn't left behind. Every save after this point is
-      // picked up automatically by storage.ts.
       if (event === 'SIGNED_IN' && session && isMounted) {
         setSyncCode('');
         setSyncStatus('idle');
-        uploadLocalState();
+        reconcileWithCloud();
       }
     });
 
@@ -278,6 +348,69 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     }
   };
 
+  // Phase 5 — the user picked which copy survives. The losing copy is ALWAYS
+  // snapshotted first (see storage.ts's conflict-backup section), so the
+  // choice stays recoverable instead of being final.
+  const handleKeepLocalData = () => {
+    const localState = loadAppState();
+    if (cloudConflict) {
+      saveConflictBackup({ state: cloudConflict.state, source: 'cloud', savedAt: new Date().toISOString() });
+      setSavedBackup(loadConflictBackup());
+    }
+    setCloudConflict(null);
+    resumeSync();
+    if (!localState) { setSyncUploadStatus('idle'); return; }
+    setSyncUploadStatus('uploading');
+    pushNow(localState).then((r) => setSyncUploadStatus(r.ok ? 'success' : 'error'));
+  };
+
+  const handleUseCloudData = () => {
+    if (!cloudConflict) return;
+    const cloudState = cloudConflict.state;
+    const localState = loadAppState();
+    if (localState) {
+      saveConflictBackup({ state: localState, source: 'device', savedAt: new Date().toISOString() });
+      setSavedBackup(loadConflictBackup());
+    }
+    setCloudConflict(null);
+    onImportState(cloudState);
+    resumeSync();
+    setSyncUploadStatus('pulled');
+  };
+
+  // Download the snapshot as a real file, so it survives even if this
+  // browser's storage is cleared later.
+  const handleDownloadBackup = () => {
+    if (!savedBackup) return;
+    try {
+      const blob = new Blob([JSON.stringify(savedBackup.state)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `safespend-replaced-copy-${savedBackup.source}-${todayLocalISO()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error downloading conflict backup', err);
+    }
+  };
+
+  // Put the snapshot back into the app. The restored data then syncs up like
+  // any other change, so it becomes the cloud copy too.
+  const handleRestoreBackup = () => {
+    if (!savedBackup) return;
+    onImportState(savedBackup.state);
+    clearConflictBackup();
+    setSavedBackup(null);
+  };
+
+  const handleDiscardBackup = () => {
+    clearConflictBackup();
+    setSavedBackup(null);
+  };
+
   const handleSyncCancelCode = () => {
     setSyncStatus('idle');
     setSyncCode('');
@@ -292,6 +425,9 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     setSyncCode('');
     setSyncErrorMsg('');
     setSyncUploadStatus('idle');
+    // Never leave sync paused behind an abandoned conflict prompt.
+    setCloudConflict(null);
+    resumeSync();
   };
 
   // Currency selection states
@@ -2734,11 +2870,123 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                     ? `مسجّل دخول بالبريد: ${syncSession.user?.email ?? ''}`
                     : `Signed in as: ${syncSession.user?.email ?? ''}`}
                 </p>
+                {syncUploadStatus === 'checking' && (
+                  <p className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                    <Loader2 size={11} className="animate-spin" />
+                    {isAr ? "جارٍ مقارنة بيانات هذا الجهاز مع السحابة..." : "Comparing this device with the cloud..."}
+                  </p>
+                )}
                 {syncUploadStatus === 'uploading' && (
                   <p className="flex items-center gap-1.5 text-[10px] text-slate-400">
                     <Loader2 size={11} className="animate-spin" />
                     {isAr ? "جارٍ رفع بياناتك إلى السحابة..." : "Uploading your data to the cloud..."}
                   </p>
+                )}
+                {syncUploadStatus === 'pulled' && (
+                  <p className="flex items-center gap-1.5 text-[10px] text-emerald-400">
+                    <CheckCircle size={11} />
+                    {isAr ? "تم جلب بياناتك من السحابة إلى هذا الجهاز." : "Your data was pulled from the cloud onto this device."}
+                  </p>
+                )}
+
+                {/* Phase 5 — both copies hold real activity. Nothing is written
+                    to either side until the user picks one here. */}
+                {syncUploadStatus === 'conflict' && cloudConflict && (
+                  <div className="flex flex-col gap-2.5 bg-amber-950/30 border border-amber-900/50 rounded-xl p-3">
+                    <div className="flex items-start gap-1.5 text-amber-300 text-[11px] font-bold">
+                      <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                      <span>{isAr ? "يوجد نسختان مختلفتان من بياناتك" : "You have two different copies of your data"}</span>
+                    </div>
+
+                    <p className="text-[10px] text-slate-300 leading-relaxed">
+                      {isAr
+                        ? "هذا الجهاز فيه بيانات مسجّلة، وحسابك بالسحابة فيه بيانات مسجّلة كذلك. اختر أي نسخة تبقى — النسخة الأخرى ستُستبدل ولا يمكن التراجع."
+                        : "This device has recorded data, and your cloud account has recorded data too. Choose which copy to keep — the other one is replaced and can't be recovered."}
+                    </p>
+
+                    <div className="flex flex-col gap-1 text-[10px] text-slate-400 bg-[#030d0a] rounded-lg p-2.5">
+                      <div className="flex justify-between gap-2">
+                        <span>{isAr ? "هذا الجهاز" : "This device"}</span>
+                        <span className="font-mono text-slate-200">
+                          {countActivity(loadAppState())} {isAr ? "سجل" : "records"}
+                        </span>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <span>{isAr ? "السحابة" : "Cloud"}</span>
+                        <span className="font-mono text-slate-200">
+                          {countActivity(cloudConflict.state)} {isAr ? "سجل" : "records"}
+                        </span>
+                      </div>
+                      {cloudConflict.updatedAt && (
+                        <div className="flex justify-between gap-2 pt-1 border-t border-emerald-950/60 mt-1">
+                          <span>{isAr ? "آخر تحديث بالسحابة" : "Cloud last updated"}</span>
+                          <span className="font-mono text-slate-200">
+                            {new Date(cloudConflict.updatedAt).toLocaleString(isAr ? 'ar-SA' : 'en-US')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <p className="text-[9px] text-slate-500 leading-relaxed">
+                      {isAr
+                        ? "نصيحة: لو ما كنت متأكداً، أغلق هذي الرسالة واستخدم \"تصدير البيانات\" بالأسفل لحفظ نسخة من بيانات هذا الجهاز أولاً."
+                        : "Tip: if you're unsure, use \"Export Data\" below to save a copy of this device's data first."}
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={handleUseCloudData}
+                      className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#030d0a] font-extrabold text-xs transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Cloud size={13} className="stroke-[2.5]" />
+                      <span>{isAr ? "استخدام بيانات السحابة" : "Use the cloud data"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleKeepLocalData}
+                      className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition-all"
+                    >
+                      {isAr ? "الاحتفاظ ببيانات هذا الجهاز" : "Keep this device's data"}
+                    </button>
+                  </div>
+                )}
+
+                {/* Phase 5 — the copy that lost a past conflict is still here.
+                    This is the whole point of taking the snapshot: the
+                    decision stays reversible. */}
+                {savedBackup && syncUploadStatus !== 'conflict' && (
+                  <div className="flex flex-col gap-2 bg-[#030d0a] border border-emerald-950/70 rounded-xl p-3">
+                    <p className="text-[10px] text-slate-300 leading-relaxed">
+                      {isAr
+                        ? `محفوظة لك: النسخة التي استُبدلت (${savedBackup.source === 'cloud' ? 'نسخة السحابة' : 'نسخة هذا الجهاز'}) بتاريخ ${new Date(savedBackup.savedAt).toLocaleString('ar-SA')}. تحتوي ${countActivity(savedBackup.state)} سجل.`
+                        : `Saved for you: the copy that was replaced (${savedBackup.source === 'cloud' ? 'the cloud copy' : "this device's copy"}) on ${new Date(savedBackup.savedAt).toLocaleString('en-US')}. It holds ${countActivity(savedBackup.state)} records.`}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDownloadBackup}
+                        className="flex-1 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[10px] transition-all flex items-center justify-center gap-1"
+                      >
+                        <Save size={11} />
+                        {isAr ? "تنزيلها" : "Download"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRestoreBackup}
+                        className="flex-1 py-2 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/50 text-emerald-300 font-bold text-[10px] transition-all"
+                      >
+                        {isAr ? "استعادتها" : "Restore"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDiscardBackup}
+                        className="py-2 px-3 rounded-lg bg-transparent hover:bg-slate-800 text-slate-500 font-bold text-[10px] transition-all"
+                      >
+                        {isAr ? "حذف" : "Discard"}
+                      </button>
+                    </div>
+                  </div>
                 )}
                 {syncUploadStatus === 'success' && (
                   <p className="flex items-center gap-1.5 text-[10px] text-emerald-400">
@@ -2754,8 +3002,8 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                 )}
                 <p className="text-[10px] text-slate-500">
                   {isAr
-                    ? "بياناتك تُرفع تلقائياً للسحابة في الخلفية كلما حدّثت شيئاً في التطبيق (مزامنة اتجاه واحد من هذا الجهاز حالياً)."
-                    : "Your data uploads to the cloud automatically in the background whenever you update something in the app (one-way sync from this device for now)."}
+                    ? "بياناتك تُرفع تلقائياً للسحابة كلما حدّثت شيئاً. وعند تسجيل الدخول من جهاز جديد تُجلب بياناتك إليه — ولو كان فيه بيانات مسجّلة مسبقاً نسألك أي نسخة تبقى قبل أي تغيير."
+                    : "Your data uploads to the cloud automatically as you make changes. Signing in on a new device brings your data to it — and if that device already has recorded data, we ask which copy to keep before changing anything."}
                 </p>
                 <button
                   type="button"
@@ -2930,7 +3178,11 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                       <p><strong className="text-emerald-400">عن هذا التطبيق:</strong> SafeSpend نسخة محاكاة تجريبية (Simulator) لإدارة المصروفات الشخصية، تعمل بالكامل على جهازك بلا خادم أو حساب أو اتصال إنترنت مطلوب لعملها.</p>
                       <p><strong className="text-emerald-400">لا يوجد فريق دعم رسمي حالياً:</strong> بما أن هذا وضع تجريبي محلي بالكامل، لا يوجد فريق دعم بشري يستقبل تذاكر دعم في هذه النسخة — لكن أي ملاحظة أو خطأ تلقاه، تواصل معي عبر زر "ملاحظات" الأخضر الموجود بأعلى كل شاشة في التطبيق.</p>
                       <p><strong className="text-emerald-400">أين بياناتي؟ هل هي آمنة؟</strong> راجع "سياسة الخصوصية والشروط" أعلاه — كل بياناتك محفوظة محلياً فقط على جهازك.</p>
-                      <p><strong className="text-emerald-400">كيف أحتفظ بنسخة من بياناتي أو أنقلها لجهاز آخر؟</strong> استخدم "تصدير البيانات" في قسم "صيانة البيانات والنسخ الاحتياطي" أدناه، ثم "استيراد البيانات" على الجهاز الآخر.</p>
+                      <p><strong className="text-emerald-400">كيف أحتفظ بنسخة من بياناتي أو أنقلها لجهاز آخر؟</strong> استخدم "تصدير البيانات" في قسم "صيانة البيانات والنسخ الاحتياطي" أدناه، ثم "استيراد البيانات" على الجهاز الآخر. أو فعّل "المزامنة السحابية" ليتم ذلك تلقائياً (اشرح أدناه).</p>
+                      <p><strong className="text-emerald-400">كيف تعمل المزامنة السحابية بالضبط؟</strong> هي ميزة اختيارية ومتوقفة افتراضياً. جهازك يبقى دائماً المرجع الأساسي: كل شيء يُحفظ محلياً أولاً وفوراً، ثم تُرفع نسخة للسحابة بالخلفية. ولو انقطع الإنترنت يستمر التطبيق طبيعياً ويُكمل الرفع تلقائياً عند عودة الاتصال.</p>
+                      <p><strong className="text-emerald-400">ماذا يحدث عند تسجيل الدخول من جهاز ثانٍ؟</strong> يقارن التطبيق أولاً قبل أن يكتب أي شيء. إن كان الجهاز الجديد بلا بيانات مسجّلة، تُجلب بياناتك من السحابة إليه مباشرة. وإن كان الجهازان يحتويان بيانات فعلية، <strong>يتوقف التطبيق ويسألك أي نسخة تبقى</strong> ويعرض عدد السجلات بكل نسخة ووقت آخر تحديث — لا دمج تلقائي ولا اختيار نيابة عنك.</p>
+                      <p><strong className="text-emerald-400">هل أخسر النسخة الأخرى إذا اخترت؟</strong> لا. قبل أي استبدال يحفظ التطبيق <strong>نسخة كاملة من النسخة المستبدَلة</strong> تلقائياً على جهازك، وتظهر لك ببطاقة المزامنة مع خيارات: تنزيلها كملف، أو استعادتها بالكامل، أو حذفها. أي قرار تتخذه يبقى قابلاً للتراجع.</p>
+                      <p><strong className="text-emerald-400">تنبيه مهم عند استخدام جهازين:</strong> المزامنة حالياً تنقل حالة التطبيق كاملة، لا كل عملية على حدة. فلو أضفت عملية على جهاز وأضفت أخرى على جهاز ثانٍ دون أن يتزامنا بينهما، ستُطلب منك المفاضلة بين النسختين بدل أن تُدمجا. الأسلم أن تفتح التطبيق على جهاز واحد في كل مرة حتى تكتمل المزامنة.</p>
                       <p><strong className="text-emerald-400">كيف أبدأ من جديد؟</strong> استخدم زر "حذف كل البيانات والبدء من جديد" (باللون الأحمر) في قسم "صيانة البيانات والنسخ الاحتياطي" أدناه — يحذف كل بياناتك المحلية نهائياً ويعيدك لشاشة البداية.</p>
                       <p className="text-slate-500 text-[10px]">آخر تحديث: سبتمبر 2026.</p>
                     </>
@@ -2939,7 +3191,11 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                       <p><strong className="text-emerald-400">About this app:</strong> SafeSpend is a demo simulator for personal expense management, running entirely on your device with no server, account, or internet connection required.</p>
                       <p><strong className="text-emerald-400">No official support team yet:</strong> Since this is a fully local demo, there's no human support team receiving tickets in this build — but for any feedback or bug, use the green "Feedback" button at the top of every screen in the app.</p>
                       <p><strong className="text-emerald-400">Where is my data? Is it safe?</strong> See "Terms & Privacy Agreement" above — all your data is stored locally on your device only.</p>
-                      <p><strong className="text-emerald-400">How do I back up my data or move it to another device?</strong> Use "Export Data" in the "Data Maintenance & Backup" section below, then "Import Data" on the other device.</p>
+                      <p><strong className="text-emerald-400">How do I back up my data or move it to another device?</strong> Use "Export Data" in the "Data Maintenance & Backup" section below, then "Import Data" on the other device. Or turn on "Cloud Sync" to have it happen automatically (explained below).</p>
+                      <p><strong className="text-emerald-400">How does Cloud Sync actually work?</strong> It's optional and off by default. Your device always stays the primary copy: everything saves locally first and instantly, then a copy is uploaded in the background. If you lose connectivity the app keeps working normally and finishes the upload automatically once you're back online.</p>
+                      <p><strong className="text-emerald-400">What happens when I sign in on a second device?</strong> The app compares before writing anything. If the new device has no recorded data, your cloud data is pulled onto it. If both the device and the cloud hold real data, <strong>the app stops and asks you which copy to keep</strong>, showing the record count on each side and when the cloud copy was last updated — no automatic merging, and no choosing on your behalf.</p>
+                      <p><strong className="text-emerald-400">Do I lose the other copy once I choose?</strong> No. Before anything is replaced, the app automatically saves <strong>a full snapshot of the replaced copy</strong> on your device. It appears in the sync card with options to download it as a file, restore it completely, or discard it. Any choice you make stays reversible.</p>
+                      <p><strong className="text-emerald-400">Important note when using two devices:</strong> Sync currently moves the app's whole state, not each individual entry. So if you add an entry on one device and another entry on a second device without letting them sync in between, you'll be asked to choose between the two copies rather than having them merged. It's safest to use one device at a time until syncing completes.</p>
                       <p><strong className="text-emerald-400">How do I start fresh?</strong> Use the "Delete All Data & Start Fresh" button (in red) in the "Data Maintenance & Backup" section below — it permanently deletes all your local data and returns you to the start screen.</p>
                       <p className="text-slate-500 text-[10px]">Last updated: September 2026.</p>
                     </>
@@ -2972,16 +3228,18 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                       see the safespend_prelaunch_text_checklist doc. */}
                   {isAr ? (
                     <>
-                      <p><strong className="text-emerald-400">أين تُحفظ بياناتك:</strong> جميع بياناتك (المعاملات، الميزانيات، الأهداف، الأقساط) تُخزَّن محلياً فقط على جهازك (localStorage)، ولا تُرسَل أو تُخزَّن على أي خادم خارجي. هذا وضع تجريبي/محاكاة (Simulator) لا يتطلب حساباً أو اتصالاً بالإنترنت لعمله.</p>
-                      <p><strong className="text-emerald-400">المشاركة مع أطراف ثالثة:</strong> لا تُشارك بياناتك مع أي طرف ثالث، ولا تُستخدم لأي غرض تسويقي، لأنها لا تغادر جهازك أصلاً.</p>
+                      <p><strong className="text-emerald-400">أين تُحفظ بياناتك:</strong> جميع بياناتك (المعاملات، الميزانيات، الأهداف، الأقساط) تُخزَّن محلياً على جهازك (localStorage) بشكل افتراضي، ولا تُرسَل لأي خادم خارجي. التطبيق لا يتطلب حساباً ولا اتصالاً بالإنترنت ليعمل.</p>
+                      <p><strong className="text-emerald-400">إذا فعّلت "المزامنة السحابية" (اختيارية ومتوقفة افتراضياً):</strong> عندها فقط تُرفع نسخة من بيانات التطبيق إلى قاعدة بيانات مستضافة لدى Supabase، مرتبطة بحسابك عبر بريدك الإلكتروني. الوصول محمي بسياسات أمان على مستوى الصف (RLS) تجعل صفك قابلاً للقراءة والكتابة من حسابك أنت فقط. تبقى نسختك المحلية كما هي دائماً، وتستطيع إيقاف المزامنة بتسجيل الخروج في أي وقت.</p>
+                      <p><strong className="text-emerald-400">المشاركة مع أطراف ثالثة:</strong> لا تُشارك بياناتك مع أي طرف ثالث ولا تُستخدم لأي غرض تسويقي إطلاقاً. وإن فعّلت المزامنة، فالطرف الوحيد الذي تمر عبره بياناتك هو مزوّد الاستضافة (Supabase) بصفته معالِجاً تقنياً للتخزين فقط.</p>
                       <p><strong className="text-emerald-400">حذف بياناتك:</strong> يمكنك حذف كل بياناتك بالكامل في أي وقت عبر زر "حذف كل البيانات والبدء من جديد" في قسم "صيانة البيانات والنسخ الاحتياطي" أدناه.</p>
                       <p><strong className="text-emerald-400">حقوقك بموجب نظام حماية البيانات الشخصية السعودي (PDPL):</strong> لديك الحق الكامل بالوصول لبياناتك (عبر "تصدير البيانات")، وتصحيحها، وحذفها — وبما أن التخزين محلي بالكامل، هذه الحقوق متاحة لك مباشرة وفورياً بلا حاجة لطلب من أي جهة.</p>
                       <p className="text-slate-500 text-[10px]">آخر تحديث: سبتمبر 2026.</p>
                     </>
                   ) : (
                     <>
-                      <p><strong className="text-emerald-400">Where your data lives:</strong> All your data (transactions, budgets, goals, installments) is stored locally on your device only (localStorage). Nothing is sent to or stored on any external server. This is a simulator that needs no account or internet connection to function.</p>
-                      <p><strong className="text-emerald-400">Third-party sharing:</strong> Your data is never shared with any third party and is never used for marketing, because it never leaves your device.</p>
+                      <p><strong className="text-emerald-400">Where your data lives:</strong> By default, all your data (transactions, budgets, goals, installments) is stored locally on your device (localStorage) and is not sent to any external server. The app needs no account and no internet connection to function.</p>
+                      <p><strong className="text-emerald-400">If you enable "Cloud Sync" (optional, off by default):</strong> only then is a copy of your app data uploaded to a database hosted by Supabase, tied to your account via your email address. Access is protected by Row Level Security policies that make your row readable and writable by your account alone. Your local copy always remains, and you can stop syncing by signing out at any time.</p>
+                      <p><strong className="text-emerald-400">Third-party sharing:</strong> Your data is never shared with any third party and is never used for marketing. If you enable sync, the only party your data passes through is the hosting provider (Supabase), acting purely as a technical storage processor.</p>
                       <p><strong className="text-emerald-400">Deleting your data:</strong> You can delete all your data at any time via the "Delete All Data & Start Fresh" button in the "Data Maintenance & Backup" section below.</p>
                       <p><strong className="text-emerald-400">Your rights under Saudi PDPL:</strong> You have full rights to access your data (via "Export Data"), correct it, and delete it — and since storage is fully local, these rights are immediately available to you without needing to request anything from anyone.</p>
                       <p className="text-slate-500 text-[10px]">Last updated: September 2026.</p>
