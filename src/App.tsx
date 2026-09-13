@@ -56,6 +56,8 @@ import {
 } from './mockData';
 import { formatMoney, computeLiveSpent, getCycleBounds, sumAmounts, todayLocalISO } from './utils';
 import { loadAppState, saveAppState } from './storage';
+import { supabase } from './supabaseClient';
+import { decideReconcile, markSynced } from './syncEngine';
 
 // Modular Screen Components
 import { DashboardScreen } from './components/DashboardScreen';
@@ -194,6 +196,48 @@ export default function App() {
     setActiveScreen('dashboard');
     setShowTour(true);
   };
+
+  // Phase 5c — app-level cloud check.
+  //
+  // Sync used to be checked only from the Settings screen, so a second device
+  // never noticed anything the first one saved: you could add an expense on
+  // the iPad and the iPhone would sit on stale data indefinitely. This runs on
+  // app open and again whenever the tab becomes visible (returning to it,
+  // unlocking the phone), which is when a person actually expects to see
+  // other devices' changes.
+  //
+  // It applies only the unambiguous outcome — the cloud being a newer version
+  // of this same data. A real divergence (both sides changed independently) is
+  // deliberately left alone here: the Settings screen owns that conversation,
+  // with the comparison and the keep-the-replaced-copy safeguard.
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkCloud = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!data.session || cancelled) return;
+        const outcome = await decideReconcile(loadAppState());
+        if (cancelled) return;
+        if (outcome.action === 'pull') {
+          handleImportState(outcome.state);
+          markSynced(outcome.updatedAt);
+        }
+      } catch {
+        // Offline or unreachable — local data is untouched and the next
+        // check (or the background push retry) will catch up.
+      }
+    };
+
+    checkCloud();
+    const onVisible = () => { if (document.visibilityState === 'visible') checkCloud(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Calculations
   const [availableToday, setAvailableToday] = useState<number>(0);

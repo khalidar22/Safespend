@@ -37,6 +37,121 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingState: Record<string, unknown> | null = null;
 let pushInFlight = false;
 
+// ---------------------------------------------------------------------------
+// Phase 5c — sync base point ("which cloud version was I last in step with?")
+//
+// Without this, a device can see that the cloud differs from itself but cannot
+// tell WHY, and the two cases need opposite handling:
+//   • the cloud is simply a NEWER version of this same data (another device
+//     saved after me) -> pull it down, silently. No question belongs here.
+//   • the cloud DIVERGED (it changed, and I also changed, independently)
+//     -> genuinely ambiguous, ask the user.
+// Both look identical without a base point, so every ordinary update turned
+// into a conflict prompt. Remembering the cloud's `updated_at` as of the last
+// successful sync — the same idea as a merge base in git — separates them.
+//
+// `dirty` marks that a local save happened after that point. storage.ts sets
+// it, but only when the saved content actually changed: the app re-saves
+// identical state on every launch, and treating that as a local edit would
+// make a freshly-opened device look like it had diverged.
+// ---------------------------------------------------------------------------
+
+const SYNC_META_KEY = 'safespend-sync-meta-v1';
+
+export interface SyncMeta {
+  baseUpdatedAt: string | null;
+  dirty: boolean;
+}
+
+const DEFAULT_META: SyncMeta = { baseUpdatedAt: null, dirty: false };
+
+export function loadSyncMeta(): SyncMeta {
+  if (typeof window === 'undefined') return { ...DEFAULT_META };
+  try {
+    const raw = localStorage.getItem(SYNC_META_KEY);
+    if (!raw) return { ...DEFAULT_META };
+    const parsed = JSON.parse(raw);
+    return {
+      baseUpdatedAt: typeof parsed?.baseUpdatedAt === 'string' ? parsed.baseUpdatedAt : null,
+      dirty: parsed?.dirty === true,
+    };
+  } catch {
+    return { ...DEFAULT_META };
+  }
+}
+
+function saveSyncMeta(meta: SyncMeta): void {
+  try {
+    localStorage.setItem(SYNC_META_KEY, JSON.stringify(meta));
+  } catch (e) {
+    console.error('SafeSpend cloud sync: could not save sync meta', e);
+  }
+}
+
+/** Called by storage.ts when a local save genuinely changed the stored state. */
+export function markLocalDirty(): void {
+  const meta = loadSyncMeta();
+  if (!meta.dirty) saveSyncMeta({ ...meta, dirty: true });
+}
+
+/** Records that this device is now exactly in step with the given cloud version. */
+export function markSynced(cloudUpdatedAt: string | null): void {
+  saveSyncMeta({ baseUpdatedAt: cloudUpdatedAt, dirty: false });
+}
+
+export function clearSyncMeta(): void {
+  try {
+    localStorage.removeItem(SYNC_META_KEY);
+  } catch { /* nothing we can do */ }
+}
+
+// ---------------------------------------------------------------------------
+// Comparison helpers (shared by the app-level auto-sync and the Settings UI)
+// ---------------------------------------------------------------------------
+
+// Only these four collections start EMPTY on a brand-new install. Commitments,
+// goals and saving boxes ship pre-filled with defaults, so counting those would
+// mark every fresh device as "already has data".
+const ACTIVITY_KEYS = ['transactions', 'installments', 'familyMembers', 'billSplits'] as const;
+
+export function countActivity(state: any): number {
+  if (!state || typeof state !== 'object') return 0;
+  return ACTIVITY_KEYS.reduce(
+    (total, key) => total + (Array.isArray(state[key]) ? state[key].length : 0),
+    0,
+  );
+}
+
+export function hasRecordedActivity(state: any): boolean {
+  return countActivity(state) > 0;
+}
+
+// Stable stringify with sorted object keys. Plain JSON.stringify is not usable
+// here: the cloud copy round-trips through Postgres `jsonb`, which does NOT
+// preserve key order, so two identical states would serialize differently and
+// look like a conflict. Array order IS preserved on purpose — the order of
+// transactions is real information.
+function canonicalJson(value: any): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']';
+  return '{' + Object.keys(value).sort()
+    .map((k) => JSON.stringify(k) + ':' + canonicalJson(value[k]))
+    .join(',') + '}';
+}
+
+// The collections holding the user's actual records. Interface preferences
+// (language, hidden balances, premium flag…) are deliberately excluded: a
+// different toggle is not a data conflict.
+const DATA_KEYS = [
+  'transactions', 'installments', 'familyMembers', 'billSplits',
+  'commitments', 'goals', 'savingBoxes', 'linkedBankAccounts', 'kidsCards',
+] as const;
+
+export function sameUserData(a: any, b: any): boolean {
+  if (!a || !b) return false;
+  return DATA_KEYS.every((key) => canonicalJson(a[key]) === canonicalJson(b[key]));
+}
+
 // Phase 5 safety gate. While a second device is deciding which copy to keep
 // (its own or the cloud's), pushing MUST stop: any stray background save —
 // even just opening a screen — would overwrite the very cloud copy the user
@@ -90,15 +205,20 @@ async function doPush(state: Record<string, unknown>): Promise<void> {
 
   pushInFlight = true;
   try {
-    const { error } = await supabase
+    // `.select()` so the row's server-assigned updated_at comes back — that
+    // value becomes this device's new base point.
+    const { data, error } = await supabase
       .from('app_state')
-      .upsert({ user_id: session.user.id, state }, { onConflict: 'user_id' });
+      .upsert({ user_id: session.user.id, state }, { onConflict: 'user_id' })
+      .select('updated_at')
+      .single();
 
     if (error) {
       console.error('SafeSpend cloud sync: push failed, will retry', error);
       pendingState = state; // keep the latest state around for the next retry
     } else {
       pendingState = null;
+      markSynced(data?.updated_at ?? null);
     }
   } catch (e) {
     console.error('SafeSpend cloud sync: push failed (network?), will retry', e);
@@ -144,17 +264,77 @@ export async function pushNow(state: Record<string, unknown>): Promise<{ ok: boo
     return { ok: false, error: 'not-signed-in' };
   }
   try {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('app_state')
-      .upsert({ user_id: session.user.id, state }, { onConflict: 'user_id' });
+      .upsert({ user_id: session.user.id, state }, { onConflict: 'user_id' })
+      .select('updated_at')
+      .single();
     if (error) {
       pendingState = state;
       return { ok: false, error: error.message };
     }
     pendingState = null;
+    markSynced(data?.updated_at ?? null);
     return { ok: true };
   } catch (e: any) {
     pendingState = state;
     return { ok: false, error: e?.message || 'network-error' };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5c — the decision engine, shared by App.tsx (runs on every app open
+// and whenever the tab becomes visible again) and by the Settings screen.
+//
+// It only READS. Applying the outcome is the caller's job, because pulling
+// means replacing app state and only the app can do that.
+// ---------------------------------------------------------------------------
+
+export type ReconcileOutcome =
+  | { action: 'none' }                                   // already in step
+  | { action: 'push' }                                   // this device is ahead
+  | { action: 'pull'; state: any; updatedAt: string | null }   // cloud is ahead
+  | { action: 'conflict'; state: any; updatedAt: string | null } // both moved
+  | { action: 'error'; error: string };
+
+export async function decideReconcile(localState: any): Promise<ReconcileOutcome> {
+  const result = await pullState();
+  if (!result.ok) return { action: 'error', error: result.error || 'unknown' };
+
+  const cloudState = result.state;
+  const cloudUpdatedAt = result.updatedAt;
+
+  // No cloud row yet — this account's first ever sync.
+  if (!cloudState) return { action: 'push' };
+
+  // Identical records? Then there is nothing to do or ask, whatever the
+  // bookkeeping says. Checking content first also absorbs a spurious `dirty`
+  // flag (e.g. a derived field recomputed at launch).
+  if (sameUserData(localState, cloudState)) {
+    markSynced(cloudUpdatedAt);
+    return { action: 'none' };
+  }
+
+  const meta = loadSyncMeta();
+  const cloudMoved = meta.baseUpdatedAt === null || cloudUpdatedAt !== meta.baseUpdatedAt;
+  const localMoved = meta.dirty;
+
+  // Cloud is untouched since we last synced -> our changes are simply newer.
+  if (!cloudMoved) return { action: 'push' };
+
+  // Cloud moved and we did not -> the cloud is a newer version of our own
+  // data. Take it; there is nothing of ours to lose.
+  if (!localMoved) return { action: 'pull', state: cloudState, updatedAt: cloudUpdatedAt };
+
+  // Both moved independently, OR this device has no base point yet and both
+  // sides hold records. That is the genuinely ambiguous case — ask.
+  if (hasRecordedActivity(localState) && hasRecordedActivity(cloudState)) {
+    return { action: 'conflict', state: cloudState, updatedAt: cloudUpdatedAt };
+  }
+
+  // One side has no real records: prefer whichever actually holds data.
+  if (hasRecordedActivity(cloudState)) {
+    return { action: 'pull', state: cloudState, updatedAt: cloudUpdatedAt };
+  }
+  return { action: 'push' };
 }

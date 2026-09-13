@@ -16,7 +16,7 @@
 // elsewhere in the app — always go through loadAppState()/saveAppState() so
 // there is exactly one place this is wired to cloud sync.
 
-import { schedulePush } from './syncEngine';
+import { schedulePush, markLocalDirty } from './syncEngine';
 
 const STORAGE_KEY = 'safespend-v1';
 
@@ -42,11 +42,27 @@ export function loadAppState(): any | null {
 // after years of transaction history, or a private-browsing quota of 0) used
 // to throw here uncaught and crash the whole app on the next user action.
 export function saveAppState(state: Record<string, unknown>): void {
+  const serialized = JSON.stringify(state);
+
+  // Phase 5c: did this save actually change anything? The app re-saves the
+  // whole state on launch and on many harmless re-renders; counting those as
+  // local edits would make an untouched device look like it had diverged from
+  // the cloud, turning every ordinary launch into a conflict prompt.
+  let contentChanged = true;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    contentChanged = localStorage.getItem(STORAGE_KEY) !== serialized;
+  } catch {
+    // Storage unreadable (private mode, blocked) — assume changed and move on.
+  }
+
+  try {
+    localStorage.setItem(STORAGE_KEY, serialized);
   } catch (e) {
     console.error("Error auto-saving state", e);
   }
+
+  if (contentChanged) markLocalDirty();
+
   // Phase 4: background cloud push (no-op unless sync is enabled — see
   // syncEngine.ts's file header for the full behavior).
   schedulePush(state);

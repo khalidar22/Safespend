@@ -49,59 +49,10 @@ import { getProvidersForCurrency, getProvider } from '../bnplProviders';
 import { supabase } from '../supabaseClient';
 import { loadAppState, saveConflictBackup, loadConflictBackup, clearConflictBackup } from '../storage';
 import type { ConflictBackup } from '../storage';
-import { pushNow, pullState, pauseSync, resumeSync } from '../syncEngine';
-
-// Phase 5 helper — "does this copy hold real user activity?"
-//
-// Deliberately counts ONLY the four collections that start out empty on a
-// brand-new install (transactions, installments, family members, bill
-// splits). Commitments, goals and saving boxes ship pre-filled with
-// defaults, so counting those would flag every fresh device as "has data"
-// and pop a conflict prompt at every single second-device sign-in.
-const ACTIVITY_KEYS = ['transactions', 'installments', 'familyMembers', 'billSplits'] as const;
-
-function countActivity(state: any): number {
-  if (!state || typeof state !== 'object') return 0;
-  return ACTIVITY_KEYS.reduce(
-    (total, key) => total + (Array.isArray(state[key]) ? state[key].length : 0),
-    0,
-  );
-}
-
-function hasRecordedActivity(state: any): boolean {
-  return countActivity(state) > 0;
-}
-
-// Stable stringify with sorted object keys. Plain JSON.stringify is not
-// usable for this comparison: the cloud copy round-trips through Postgres
-// `jsonb`, which does NOT preserve key order, so two byte-identical states
-// would serialize differently and look like a conflict. Array order IS
-// preserved on purpose — the order of transactions is real information.
-function canonicalJson(value: any): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
-  if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']';
-  return '{' + Object.keys(value).sort()
-    .map((k) => JSON.stringify(k) + ':' + canonicalJson(value[k]))
-    .join(',') + '}';
-}
-
-// The collections that represent the user's actual records. Interface
-// preferences (language, hidden balances, premium flag…) are deliberately
-// left out: a different toggle is not a data conflict, and prompting over
-// one would nag the user at every sign-in for no benefit.
-const DATA_KEYS = [
-  'transactions', 'installments', 'familyMembers', 'billSplits',
-  'commitments', 'goals', 'savingBoxes', 'linkedBankAccounts', 'kidsCards',
-] as const;
-
-// True when both copies hold the same records. Without this check the app
-// asks "which copy do you want to keep?" even when the two are identical —
-// which is exactly what happens right after a previous choice synced them,
-// turning a one-time question into one that reappears at every launch.
-function sameUserData(a: any, b: any): boolean {
-  if (!a || !b) return false;
-  return DATA_KEYS.every((key) => canonicalJson(a[key]) === canonicalJson(b[key]));
-}
+import {
+  pushNow, pauseSync, resumeSync, decideReconcile, markSynced, clearSyncMeta,
+  countActivity,
+} from '../syncEngine';
 
 interface ManagementScreensProps {
   screenId: ScreenId;
@@ -267,51 +218,44 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
       pauseSync();
       setSyncUploadStatus('checking');
 
-      const result = await pullState();
+      const outcome = await decideReconcile(localState);
       if (!isMounted) { resumeSync(); return; }
 
-      if (!result.ok) {
-        resumeSync();
-        setSyncUploadStatus('error');
-        return;
-      }
-
-      const cloudHasData = result.state && hasRecordedActivity(result.state);
-      const localHasData = localState && hasRecordedActivity(localState);
-
-      const pushLocal = () => {
-        resumeSync();
-        if (!localState) { setSyncUploadStatus('idle'); return; }
-        setSyncUploadStatus('uploading');
-        pushNow(localState).then((r) => {
-          if (isMounted) setSyncUploadStatus(r.ok ? 'success' : 'error');
-        });
-      };
-
-      if (cloudHasData && localHasData) {
-        // Identical records on both sides is the NORMAL state right after a
-        // previous sync — not a conflict. Push quietly (so preference-only
-        // changes still travel) and, critically, do NOT call onImportState
-        // here: that navigates to the dashboard, which would throw the user
-        // out of Settings on every single visit.
-        if (sameUserData(localState, result.state)) {
-          pushLocal();
+      switch (outcome.action) {
+        case 'error':
+          resumeSync();
+          setSyncUploadStatus('error');
           return;
-        }
-        setCloudConflict({ state: result.state, updatedAt: result.updatedAt });
-        setSyncUploadStatus('conflict');
-        return; // stay paused — no writes until the user chooses
-      }
 
-      if (cloudHasData) {
-        // This device has nothing of its own to lose: take the cloud copy.
-        onImportState(result.state);
-        resumeSync();
-        setSyncUploadStatus('pulled');
-        return;
-      }
+        case 'conflict':
+          // Stay paused — nothing is written to either side until the user
+          // picks, and the losing copy is snapshotted first.
+          setCloudConflict({ state: outcome.state, updatedAt: outcome.updatedAt });
+          setSyncUploadStatus('conflict');
+          return;
 
-      pushLocal();
+        case 'pull':
+          onImportState(outcome.state);
+          markSynced(outcome.updatedAt);
+          resumeSync();
+          setSyncUploadStatus('pulled');
+          return;
+
+        case 'none':
+          resumeSync();
+          setSyncUploadStatus('success');
+          return;
+
+        case 'push':
+        default:
+          resumeSync();
+          if (!localState) { setSyncUploadStatus('idle'); return; }
+          setSyncUploadStatus('uploading');
+          pushNow(localState).then((r) => {
+            if (isMounted) setSyncUploadStatus(r.ok ? 'success' : 'error');
+          });
+          return;
+      }
     };
 
     supabase.auth.getSession().then(({ data }) => {
@@ -422,6 +366,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   const handleUseCloudData = () => {
     if (!cloudConflict) return;
     const cloudState = cloudConflict.state;
+    const cloudUpdatedAt = cloudConflict.updatedAt;
     const localState = loadAppState();
     if (localState) {
       saveConflictBackup({ state: localState, source: 'device', savedAt: new Date().toISOString() });
@@ -429,6 +374,9 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     }
     setCloudConflict(null);
     onImportState(cloudState);
+    // This device is now exactly the cloud version — record that as the new
+    // base point, or the very next check would call it a divergence again.
+    markSynced(cloudUpdatedAt);
     resumeSync();
     setSyncUploadStatus('pulled');
   };
@@ -483,6 +431,9 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     // Never leave sync paused behind an abandoned conflict prompt.
     setCloudConflict(null);
     resumeSync();
+    // Forget the base point too: a later sign-in (possibly a different
+    // account) must not be compared against this session's cloud version.
+    clearSyncMeta();
   };
 
   // Currency selection states
