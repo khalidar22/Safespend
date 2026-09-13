@@ -72,6 +72,37 @@ function hasRecordedActivity(state: any): boolean {
   return countActivity(state) > 0;
 }
 
+// Stable stringify with sorted object keys. Plain JSON.stringify is not
+// usable for this comparison: the cloud copy round-trips through Postgres
+// `jsonb`, which does NOT preserve key order, so two byte-identical states
+// would serialize differently and look like a conflict. Array order IS
+// preserved on purpose — the order of transactions is real information.
+function canonicalJson(value: any): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']';
+  return '{' + Object.keys(value).sort()
+    .map((k) => JSON.stringify(k) + ':' + canonicalJson(value[k]))
+    .join(',') + '}';
+}
+
+// The collections that represent the user's actual records. Interface
+// preferences (language, hidden balances, premium flag…) are deliberately
+// left out: a different toggle is not a data conflict, and prompting over
+// one would nag the user at every sign-in for no benefit.
+const DATA_KEYS = [
+  'transactions', 'installments', 'familyMembers', 'billSplits',
+  'commitments', 'goals', 'savingBoxes', 'linkedBankAccounts', 'kidsCards',
+] as const;
+
+// True when both copies hold the same records. Without this check the app
+// asks "which copy do you want to keep?" even when the two are identical —
+// which is exactly what happens right after a previous choice synced them,
+// turning a one-time question into one that reappears at every launch.
+function sameUserData(a: any, b: any): boolean {
+  if (!a || !b) return false;
+  return DATA_KEYS.every((key) => canonicalJson(a[key]) === canonicalJson(b[key]));
+}
+
 interface ManagementScreensProps {
   screenId: ScreenId;
   lang: AppLanguage;
@@ -191,6 +222,20 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   // The snapshot of whichever copy was replaced by a past conflict decision.
   // Kept until the user restores it or explicitly discards it.
   const [savedBackup, setSavedBackup] = useState<ConflictBackup | null>(() => loadConflictBackup());
+
+  // Gregorian calendar with Arabic month names and Latin digits — matching
+  // the rest of the app. Plain 'ar-SA' is NOT usable here: it defaults to the
+  // Hijri calendar and Arabic-Indic digits, so a sync timestamp came out as
+  // "٢ ربيع الآخر ١٤٤٨" while every other date in the app read "13-09-2026".
+  const formatSyncTime = (iso: string): string => {
+    try {
+      return new Date(iso).toLocaleString(isAr ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-US', {
+        year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+      });
+    } catch {
+      return iso;
+    }
+  };
   // 6-digit code the user types in from the sign-in email. This replaced the
   // original magic-LINK flow: on mobile the link opened a brand-new browser
   // tab every time (they piled up), and Gmail collapsed each repeat email's
@@ -234,7 +279,25 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
       const cloudHasData = result.state && hasRecordedActivity(result.state);
       const localHasData = localState && hasRecordedActivity(localState);
 
+      const pushLocal = () => {
+        resumeSync();
+        if (!localState) { setSyncUploadStatus('idle'); return; }
+        setSyncUploadStatus('uploading');
+        pushNow(localState).then((r) => {
+          if (isMounted) setSyncUploadStatus(r.ok ? 'success' : 'error');
+        });
+      };
+
       if (cloudHasData && localHasData) {
+        // Identical records on both sides is the NORMAL state right after a
+        // previous sync — not a conflict. Push quietly (so preference-only
+        // changes still travel) and, critically, do NOT call onImportState
+        // here: that navigates to the dashboard, which would throw the user
+        // out of Settings on every single visit.
+        if (sameUserData(localState, result.state)) {
+          pushLocal();
+          return;
+        }
         setCloudConflict({ state: result.state, updatedAt: result.updatedAt });
         setSyncUploadStatus('conflict');
         return; // stay paused — no writes until the user chooses
@@ -248,15 +311,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
         return;
       }
 
-      resumeSync();
-      if (localState) {
-        setSyncUploadStatus('uploading');
-        pushNow(localState).then((r) => {
-          if (isMounted) setSyncUploadStatus(r.ok ? 'success' : 'error');
-        });
-      } else {
-        setSyncUploadStatus('idle');
-      }
+      pushLocal();
     };
 
     supabase.auth.getSession().then(({ data }) => {
@@ -2921,7 +2976,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                         <div className="flex justify-between gap-2 pt-1 border-t border-emerald-950/60 mt-1">
                           <span>{isAr ? "آخر تحديث بالسحابة" : "Cloud last updated"}</span>
                           <span className="font-mono text-slate-200">
-                            {new Date(cloudConflict.updatedAt).toLocaleString(isAr ? 'ar-SA' : 'en-US')}
+                            {formatSyncTime(cloudConflict.updatedAt)}
                           </span>
                         </div>
                       )}
@@ -2959,8 +3014,8 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                   <div className="flex flex-col gap-2 bg-[#030d0a] border border-emerald-950/70 rounded-xl p-3">
                     <p className="text-[10px] text-slate-300 leading-relaxed">
                       {isAr
-                        ? `محفوظة لك: النسخة التي استُبدلت (${savedBackup.source === 'cloud' ? 'نسخة السحابة' : 'نسخة هذا الجهاز'}) بتاريخ ${new Date(savedBackup.savedAt).toLocaleString('ar-SA')}. تحتوي ${countActivity(savedBackup.state)} سجل.`
-                        : `Saved for you: the copy that was replaced (${savedBackup.source === 'cloud' ? 'the cloud copy' : "this device's copy"}) on ${new Date(savedBackup.savedAt).toLocaleString('en-US')}. It holds ${countActivity(savedBackup.state)} records.`}
+                        ? `محفوظة لك: النسخة التي استُبدلت (${savedBackup.source === 'cloud' ? 'نسخة السحابة' : 'نسخة هذا الجهاز'}) بتاريخ ${formatSyncTime(savedBackup.savedAt)}. تحتوي ${countActivity(savedBackup.state)} سجل.`
+                        : `Saved for you: the copy that was replaced (${savedBackup.source === 'cloud' ? 'the cloud copy' : "this device's copy"}) on ${formatSyncTime(savedBackup.savedAt)}. It holds ${countActivity(savedBackup.state)} records.`}
                     </p>
                     <div className="flex gap-2">
                       <button
