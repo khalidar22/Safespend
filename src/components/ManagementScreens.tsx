@@ -236,7 +236,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
 
         case 'pull':
           onImportState(outcome.state);
-          markSynced(outcome.updatedAt);
+          markSynced(outcome.updatedAt, outcome.state);
           resumeSync();
           setSyncUploadStatus('pulled');
           return;
@@ -376,7 +376,7 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     onImportState(cloudState);
     // This device is now exactly the cloud version — record that as the new
     // base point, or the very next check would call it a divergence again.
-    markSynced(cloudUpdatedAt);
+    markSynced(cloudUpdatedAt, cloudState);
     resumeSync();
     setSyncUploadStatus('pulled');
   };

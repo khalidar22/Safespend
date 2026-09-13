@@ -50,20 +50,21 @@ let pushInFlight = false;
 // into a conflict prompt. Remembering the cloud's `updated_at` as of the last
 // successful sync — the same idea as a merge base in git — separates them.
 //
-// `dirty` marks that a local save happened after that point. storage.ts sets
-// it, but only when the saved content actually changed: the app re-saves
-// identical state on every launch, and treating that as a local edit would
-// make a freshly-opened device look like it had diverged.
+// "Has this device changed since then?" is answered by signing the records
+// themselves (see markSynced below), not by watching for saves — the app
+// re-saves on launch, and applying a pull is itself a save.
 // ---------------------------------------------------------------------------
 
-const SYNC_META_KEY = 'safespend-sync-meta-v1';
+const SYNC_META_KEY = 'safespend-sync-meta-v2';
 
 export interface SyncMeta {
+  /** The cloud row's updated_at as of the last successful sync. */
   baseUpdatedAt: string | null;
-  dirty: boolean;
+  /** Signature of the RECORDS this device held at that moment. */
+  baseSignature: string | null;
 }
 
-const DEFAULT_META: SyncMeta = { baseUpdatedAt: null, dirty: false };
+const DEFAULT_META: SyncMeta = { baseUpdatedAt: null, baseSignature: null };
 
 export function loadSyncMeta(): SyncMeta {
   if (typeof window === 'undefined') return { ...DEFAULT_META };
@@ -73,7 +74,7 @@ export function loadSyncMeta(): SyncMeta {
     const parsed = JSON.parse(raw);
     return {
       baseUpdatedAt: typeof parsed?.baseUpdatedAt === 'string' ? parsed.baseUpdatedAt : null,
-      dirty: parsed?.dirty === true,
+      baseSignature: typeof parsed?.baseSignature === 'string' ? parsed.baseSignature : null,
     };
   } catch {
     return { ...DEFAULT_META };
@@ -88,15 +89,21 @@ function saveSyncMeta(meta: SyncMeta): void {
   }
 }
 
-/** Called by storage.ts when a local save genuinely changed the stored state. */
-export function markLocalDirty(): void {
-  const meta = loadSyncMeta();
-  if (!meta.dirty) saveSyncMeta({ ...meta, dirty: true });
-}
-
-/** Records that this device is now exactly in step with the given cloud version. */
-export function markSynced(cloudUpdatedAt: string | null): void {
-  saveSyncMeta({ baseUpdatedAt: cloudUpdatedAt, dirty: false });
+/**
+ * Records that this device is now in step with `cloudUpdatedAt`, holding
+ * exactly the records in `state`.
+ *
+ * The second argument is what makes this reliable. The previous version kept
+ * a `dirty` boolean that storage.ts flipped on every changed save — but
+ * applying a PULL is itself a save, so a device became "dirty" the instant it
+ * accepted cloud data. From then on it saw both sides as changed, called it a
+ * divergence, and silently refused to pull again: sync worked exactly once
+ * per fresh page load. Signing the content instead answers the question that
+ * actually matters — "do my records still match what I last synced?" — no
+ * matter what caused the save or in what order effects ran.
+ */
+export function markSynced(cloudUpdatedAt: string | null, state: any): void {
+  saveSyncMeta({ baseUpdatedAt: cloudUpdatedAt, baseSignature: signRecords(state) });
 }
 
 export function clearSyncMeta(): void {
@@ -150,6 +157,13 @@ const DATA_KEYS = [
 export function sameUserData(a: any, b: any): boolean {
   if (!a || !b) return false;
   return DATA_KEYS.every((key) => canonicalJson(a[key]) === canonicalJson(b[key]));
+}
+
+/** One string standing for "the records this state holds" — preferences and
+ *  derived values (recomputed at launch) are excluded on purpose. */
+export function signRecords(state: any): string {
+  if (!state) return '';
+  return DATA_KEYS.map((key) => canonicalJson(state[key])).join('|');
 }
 
 // Phase 5 safety gate. While a second device is deciding which copy to keep
@@ -218,7 +232,7 @@ async function doPush(state: Record<string, unknown>): Promise<void> {
       pendingState = state; // keep the latest state around for the next retry
     } else {
       pendingState = null;
-      markSynced(data?.updated_at ?? null);
+      markSynced(data?.updated_at ?? null, state);
     }
   } catch (e) {
     console.error('SafeSpend cloud sync: push failed (network?), will retry', e);
@@ -274,7 +288,7 @@ export async function pushNow(state: Record<string, unknown>): Promise<{ ok: boo
       return { ok: false, error: error.message };
     }
     pendingState = null;
-    markSynced(data?.updated_at ?? null);
+    markSynced(data?.updated_at ?? null, state);
     return { ok: true };
   } catch (e: any) {
     pendingState = state;
@@ -311,13 +325,16 @@ export async function decideReconcile(localState: any): Promise<ReconcileOutcome
   // bookkeeping says. Checking content first also absorbs a spurious `dirty`
   // flag (e.g. a derived field recomputed at launch).
   if (sameUserData(localState, cloudState)) {
-    markSynced(cloudUpdatedAt);
+    markSynced(cloudUpdatedAt, localState);
     return { action: 'none' };
   }
 
   const meta = loadSyncMeta();
   const cloudMoved = meta.baseUpdatedAt === null || cloudUpdatedAt !== meta.baseUpdatedAt;
-  const localMoved = meta.dirty;
+  // No base signature yet (first sync on this device, or upgrading from the
+  // old meta format) — we cannot prove this device is unchanged, so treat it
+  // as changed and let the ambiguous branch below ask rather than assume.
+  const localMoved = meta.baseSignature === null || signRecords(localState) !== meta.baseSignature;
 
   // Cloud is untouched since we last synced -> our changes are simply newer.
   if (!cloudMoved) return { action: 'push' };

@@ -221,7 +221,7 @@ export default function App() {
         if (cancelled) return;
         if (outcome.action === 'pull') {
           handleImportState(outcome.state);
-          markSynced(outcome.updatedAt);
+          markSynced(outcome.updatedAt, outcome.state);
         }
       } catch {
         // Offline or unreachable — local data is untouched and the next
