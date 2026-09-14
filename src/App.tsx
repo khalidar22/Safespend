@@ -55,9 +55,9 @@ import {
   INITIAL_FAMILY_MEMBERS
 } from './mockData';
 import { formatMoney, computeLiveSpent, getCycleBounds, sumAmounts, todayLocalISO } from './utils';
-import { loadAppState, saveAppState } from './storage';
+import { loadAppState, saveAppState, saveConflictBackup } from './storage';
 import { supabase } from './supabaseClient';
-import { decideReconcile, markSynced } from './syncEngine';
+import { syncCycle } from './syncRecords';
 
 // Modular Screen Components
 import { DashboardScreen } from './components/DashboardScreen';
@@ -206,10 +206,14 @@ export default function App() {
   // unlocking the phone), which is when a person actually expects to see
   // other devices' changes.
   //
-  // It applies only the unambiguous outcome — the cloud being a newer version
-  // of this same data. A real divergence (both sides changed independently) is
-  // deliberately left alone here: the Settings screen owns that conversation,
-  // with the comparison and the keep-the-replaced-copy safeguard.
+  // Phase 7 (claude/safespend_phase7_record_sync_design.md) replaced the old
+  // whole-blob reconcile (which could only say "pull" / "push" / "conflict,
+  // ask the user") with record-level sync: syncCycle() pushes this device's
+  // own changes, pulls everyone else's, and merges each record
+  // independently — there is no more whole-account conflict to ask about,
+  // so this now always applies the result directly. As a safety net (not a
+  // blocking prompt) the pre-merge state is snapshotted first, recoverable
+  // from the Settings screen's "saved for you" card.
   useEffect(() => {
     let cancelled = false;
 
@@ -217,11 +221,14 @@ export default function App() {
       try {
         const { data } = await supabase.auth.getSession();
         if (!data.session || cancelled) return;
-        const outcome = await decideReconcile(loadAppState());
+        const before = loadAppState();
+        const result = await syncCycle(before);
         if (cancelled) return;
-        if (outcome.action === 'pull') {
-          handleImportState(outcome.state);
-          markSynced(outcome.updatedAt, outcome.state);
+        if (result.ok && result.mergedState) {
+          if (before) {
+            saveConflictBackup({ state: before, source: 'device', savedAt: new Date().toISOString() });
+          }
+          handleImportState(result.mergedState);
         }
       } catch {
         // Offline or unreachable — local data is untouched and the next

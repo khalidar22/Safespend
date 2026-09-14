@@ -50,9 +50,8 @@ import { supabase } from '../supabaseClient';
 import { loadAppState, saveConflictBackup, loadConflictBackup, clearConflictBackup } from '../storage';
 import type { ConflictBackup } from '../storage';
 import {
-  pushNow, pauseSync, resumeSync, decideReconcile, markSynced, clearSyncMeta,
-  countActivity,
-} from '../syncEngine';
+  syncCycle, clearSyncState, countActivity,
+} from '../syncRecords';
 
 interface ManagementScreensProps {
   screenId: ScreenId;
@@ -165,13 +164,12 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   const [syncStatus, setSyncStatus] = useState<'idle' | 'sending' | 'sent' | 'verifying' | 'error'>('idle');
   const [syncErrorMsg, setSyncErrorMsg] = useState<string>('');
   const [syncSession, setSyncSession] = useState<any>(null);
-  const [syncUploadStatus, setSyncUploadStatus] = useState<'idle' | 'checking' | 'uploading' | 'success' | 'pulled' | 'conflict' | 'error'>('idle');
-  // Phase 5: set only when BOTH this device and the cloud hold real user
-  // activity and the user must pick one. Nothing is written either way until
-  // they do — see reconcileWithCloud() below.
-  const [cloudConflict, setCloudConflict] = useState<{ state: any; updatedAt: string | null } | null>(null);
-  // The snapshot of whichever copy was replaced by a past conflict decision.
-  // Kept until the user restores it or explicitly discards it.
+  const [syncUploadStatus, setSyncUploadStatus] = useState<'idle' | 'checking' | 'uploading' | 'success' | 'pulled' | 'error'>('idle');
+  // Phase 7: record-level sync merges each record independently, so there is
+  // no more whole-account "pick a copy" conflict to ask about. The snapshot
+  // taken right before adopting any cloud changes is kept here as a silent
+  // safety net instead — until the user restores it or explicitly discards
+  // it — see claude/safespend_phase7_record_sync_design.md.
   const [savedBackup, setSavedBackup] = useState<ConflictBackup | null>(() => loadConflictBackup());
 
   // Gregorian calendar with Arabic month names and Latin digits — matching
@@ -199,63 +197,41 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
   useEffect(() => {
     let isMounted = true;
 
-    // Phase 5 — reconcile this device with the cloud copy.
+    // Phase 7 — reconcile this device with the cloud, record by record.
     //
-    // Order matters: we PULL FIRST, then decide, then push. Phase 4 pushed
-    // immediately on sign-in, which meant a freshly-installed second device
-    // would overwrite the account's real data with its own empty state
-    // before anyone could object (exactly what happened in testing on
-    // 13 Sep 2026). Nothing is written to either side until the outcome is
-    // unambiguous, or until the user picks one.
-    //
-    // Three outcomes:
-    //   • cloud empty          -> push this device up (nothing to lose)
-    //   • cloud has data, this device has no recorded activity
-    //                          -> pull the cloud down automatically
-    //   • both have real data  -> STOP and ask. Never merge, never guess.
+    // syncCycle() pushes whatever this device changed since its last sync,
+    // pulls whatever every other device changed, and merges them — each
+    // record independently, never as one whole-account decision. That
+    // structurally removes the old "both sides have real data, ask the
+    // user which one wins" conflict: two devices adding different records
+    // both simply survive. The pre-merge state is still snapshotted first,
+    // silently, as a safety net the Settings screen can restore from — not
+    // a prompt blocking on a decision (see
+    // claude/safespend_phase7_record_sync_design.md for the full rationale
+    // and the pre-launch review that shaped this).
     const reconcileWithCloud = async () => {
-      const localState = loadAppState();
-      pauseSync();
+      const before = loadAppState();
       setSyncUploadStatus('checking');
 
-      const outcome = await decideReconcile(localState);
-      if (!isMounted) { resumeSync(); return; }
+      const result = await syncCycle(before);
+      if (!isMounted) return;
 
-      switch (outcome.action) {
-        case 'error':
-          resumeSync();
-          setSyncUploadStatus('error');
-          return;
-
-        case 'conflict':
-          // Stay paused — nothing is written to either side until the user
-          // picks, and the losing copy is snapshotted first.
-          setCloudConflict({ state: outcome.state, updatedAt: outcome.updatedAt });
-          setSyncUploadStatus('conflict');
-          return;
-
-        case 'pull':
-          onImportState(outcome.state);
-          markSynced(outcome.updatedAt, outcome.state);
-          resumeSync();
-          setSyncUploadStatus('pulled');
-          return;
-
-        case 'none':
-          resumeSync();
-          setSyncUploadStatus('success');
-          return;
-
-        case 'push':
-        default:
-          resumeSync();
-          if (!localState) { setSyncUploadStatus('idle'); return; }
-          setSyncUploadStatus('uploading');
-          pushNow(localState).then((r) => {
-            if (isMounted) setSyncUploadStatus(r.ok ? 'success' : 'error');
-          });
-          return;
+      if (!result.ok) {
+        setSyncUploadStatus('error');
+        return;
       }
+
+      if (result.mergedState) {
+        if (before) {
+          saveConflictBackup({ state: before, source: 'device', savedAt: new Date().toISOString() });
+          setSavedBackup(loadConflictBackup());
+        }
+        onImportState(result.mergedState);
+        setSyncUploadStatus('pulled');
+        return;
+      }
+
+      setSyncUploadStatus('success');
     };
 
     supabase.auth.getSession().then(({ data }) => {
@@ -347,40 +323,6 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     }
   };
 
-  // Phase 5 — the user picked which copy survives. The losing copy is ALWAYS
-  // snapshotted first (see storage.ts's conflict-backup section), so the
-  // choice stays recoverable instead of being final.
-  const handleKeepLocalData = () => {
-    const localState = loadAppState();
-    if (cloudConflict) {
-      saveConflictBackup({ state: cloudConflict.state, source: 'cloud', savedAt: new Date().toISOString() });
-      setSavedBackup(loadConflictBackup());
-    }
-    setCloudConflict(null);
-    resumeSync();
-    if (!localState) { setSyncUploadStatus('idle'); return; }
-    setSyncUploadStatus('uploading');
-    pushNow(localState).then((r) => setSyncUploadStatus(r.ok ? 'success' : 'error'));
-  };
-
-  const handleUseCloudData = () => {
-    if (!cloudConflict) return;
-    const cloudState = cloudConflict.state;
-    const cloudUpdatedAt = cloudConflict.updatedAt;
-    const localState = loadAppState();
-    if (localState) {
-      saveConflictBackup({ state: localState, source: 'device', savedAt: new Date().toISOString() });
-      setSavedBackup(loadConflictBackup());
-    }
-    setCloudConflict(null);
-    onImportState(cloudState);
-    // This device is now exactly the cloud version — record that as the new
-    // base point, or the very next check would call it a divergence again.
-    markSynced(cloudUpdatedAt, cloudState);
-    resumeSync();
-    setSyncUploadStatus('pulled');
-  };
-
   // Download the snapshot as a real file, so it survives even if this
   // browser's storage is cleared later.
   const handleDownloadBackup = () => {
@@ -428,12 +370,11 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
     setSyncCode('');
     setSyncErrorMsg('');
     setSyncUploadStatus('idle');
-    // Never leave sync paused behind an abandoned conflict prompt.
-    setCloudConflict(null);
-    resumeSync();
-    // Forget the base point too: a later sign-in (possibly a different
-    // account) must not be compared against this session's cloud version.
-    clearSyncMeta();
+    // Forget the snapshot/cursor too: a later sign-in (possibly a different
+    // account) must not be diffed or resumed against this session's cloud
+    // data. Also drops the gate, so the next sign-in can't push before it
+    // has completed a real cycle of its own.
+    clearSyncState();
   };
 
   // Currency selection states
@@ -2895,73 +2836,11 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
                   </p>
                 )}
 
-                {/* Phase 5 — both copies hold real activity. Nothing is written
-                    to either side until the user picks one here. */}
-                {syncUploadStatus === 'conflict' && cloudConflict && (
-                  <div className="flex flex-col gap-2.5 bg-amber-950/30 border border-amber-900/50 rounded-xl p-3">
-                    <div className="flex items-start gap-1.5 text-amber-300 text-[11px] font-bold">
-                      <AlertTriangle size={13} className="shrink-0 mt-0.5" />
-                      <span>{isAr ? "يوجد نسختان مختلفتان من بياناتك" : "You have two different copies of your data"}</span>
-                    </div>
-
-                    <p className="text-[10px] text-slate-300 leading-relaxed">
-                      {isAr
-                        ? "هذا الجهاز فيه بيانات مسجّلة، وحسابك بالسحابة فيه بيانات مسجّلة كذلك. اختر أي نسخة تبقى — النسخة الأخرى ستُستبدل ولا يمكن التراجع."
-                        : "This device has recorded data, and your cloud account has recorded data too. Choose which copy to keep — the other one is replaced and can't be recovered."}
-                    </p>
-
-                    <div className="flex flex-col gap-1 text-[10px] text-slate-400 bg-[#030d0a] rounded-lg p-2.5">
-                      <div className="flex justify-between gap-2">
-                        <span>{isAr ? "هذا الجهاز" : "This device"}</span>
-                        <span className="font-mono text-slate-200">
-                          {countActivity(loadAppState())} {isAr ? "سجل" : "records"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between gap-2">
-                        <span>{isAr ? "السحابة" : "Cloud"}</span>
-                        <span className="font-mono text-slate-200">
-                          {countActivity(cloudConflict.state)} {isAr ? "سجل" : "records"}
-                        </span>
-                      </div>
-                      {cloudConflict.updatedAt && (
-                        <div className="flex justify-between gap-2 pt-1 border-t border-emerald-950/60 mt-1">
-                          <span>{isAr ? "آخر تحديث بالسحابة" : "Cloud last updated"}</span>
-                          <span className="font-mono text-slate-200">
-                            {formatSyncTime(cloudConflict.updatedAt)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    <p className="text-[9px] text-slate-500 leading-relaxed">
-                      {isAr
-                        ? "نصيحة: لو ما كنت متأكداً، أغلق هذي الرسالة واستخدم \"تصدير البيانات\" بالأسفل لحفظ نسخة من بيانات هذا الجهاز أولاً."
-                        : "Tip: if you're unsure, use \"Export Data\" below to save a copy of this device's data first."}
-                    </p>
-
-                    <button
-                      type="button"
-                      onClick={handleUseCloudData}
-                      className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-[#030d0a] font-extrabold text-xs transition-all flex items-center justify-center gap-1.5"
-                    >
-                      <Cloud size={13} className="stroke-[2.5]" />
-                      <span>{isAr ? "استخدام بيانات السحابة" : "Use the cloud data"}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleKeepLocalData}
-                      className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs transition-all"
-                    >
-                      {isAr ? "الاحتفاظ ببيانات هذا الجهاز" : "Keep this device's data"}
-                    </button>
-                  </div>
-                )}
-
-                {/* Phase 5 — the copy that lost a past conflict is still here.
-                    This is the whole point of taking the snapshot: the
-                    decision stays reversible. */}
-                {savedBackup && syncUploadStatus !== 'conflict' && (
+                {/* Phase 7 — a silent safety net, not a blocking question.
+                    Record-level sync merges independently per record, so
+                    there is no more whole-account conflict to ask about;
+                    this is just the pre-merge snapshot, kept reversible. */}
+                {savedBackup && (
                   <div className="flex flex-col gap-2 bg-[#030d0a] border border-emerald-950/70 rounded-xl p-3">
                     <p className="text-[10px] text-slate-300 leading-relaxed">
                       {isAr

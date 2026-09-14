@@ -1,3 +1,21 @@
+// ⚠️ RETIRED 14 Sep 2026 — nothing in the app imports this file anymore.
+//
+// This whole-blob engine is what caused real data loss that day (a stale
+// device's unconditional background push overwrote the cloud's newer data —
+// see claude/safespend_sync_open_bug_data_loss.md in the "الخبراء" project).
+// It was replaced by record-level sync (syncRecords.ts, wired in via
+// storage.ts/App.tsx/ManagementScreens.tsx — see
+// claude/safespend_phase7_record_sync_design.md and
+// claude/safespend_phase7_review_findings.md for the full design and the
+// pre-launch review that shaped it).
+//
+// Left in place (not deleted) only so this history stays easy to find. Do
+// not import from here again, and do not resurrect schedulePush()/pushNow()
+// as a "quick fix" for anything — they are exactly the unconditional-push
+// pattern that broke real user data once already.
+//
+// --- original Phase 4 file header below, kept for context -----------------
+//
 // SafeSpend — cloud sync engine (Phase 4).
 //
 // Push-only for now: whenever a user has opted in to cloud sync (see

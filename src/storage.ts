@@ -7,16 +7,26 @@
 //
 // Phase 4 (claude/safespend_sync_implementation_plan.md in the "الخبراء"
 // project) added one addition: after the local write, saveAppState() also
-// tells syncEngine.ts about the new state via schedulePush(). That call is
-// a silent no-op unless the user has an active Supabase Auth session (see
+// tells the sync engine about the new state. That call is a silent no-op
+// unless the user has an active Supabase Auth session (see
 // ManagementScreens.tsx's "Cloud Sync" card) — someone who never opens
 // that card or never signs in sees zero behavior change here.
+//
+// Phase 7 (claude/safespend_phase7_record_sync_design.md) replaced the old
+// whole-blob engine (syncEngine.ts, retired 14 Sep 2026 after it caused real
+// data loss) with record-level sync (syncRecords.ts). scheduleSync() is
+// handed loadAppState ITSELF — a function, not the `state` value being saved
+// here — so that when the debounced push actually fires a couple of seconds
+// later, it re-reads the freshest on-disk state at that moment rather than
+// a value captured (and potentially stale by then) back when this save
+// happened. Passing the value instead of the function would silently defeat
+// that protection, so don't "simplify" this back to `scheduleSync(state)`.
 //
 // Do not add new localStorage.getItem/setItem('safespend-v1', ...) calls
 // elsewhere in the app — always go through loadAppState()/saveAppState() so
 // there is exactly one place this is wired to cloud sync.
 
-import { schedulePush } from './syncEngine';
+import { scheduleSync } from './syncRecords';
 
 const STORAGE_KEY = 'safespend-v1';
 
@@ -48,9 +58,9 @@ export function saveAppState(state: Record<string, unknown>): void {
     console.error("Error auto-saving state", e);
   }
 
-  // Phase 4: background cloud push (no-op unless sync is enabled — see
-  // syncEngine.ts's file header for the full behavior).
-  schedulePush(state);
+  // Phase 4/7: background cloud push (no-op unless sync is enabled — see
+  // syncRecords.ts's file header for the full behavior).
+  scheduleSync(loadAppState);
 }
 
 // ---------------------------------------------------------------------------
