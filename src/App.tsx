@@ -222,7 +222,11 @@ export default function App() {
         const { data } = await supabase.auth.getSession();
         if (!data.session || cancelled) return;
         const before = loadAppState();
-        const result = await syncCycle(before);
+        // Pass the getter, not the value — syncCycle reads fresh state
+        // itself, synchronously, right after it takes its lock. Passing a
+        // captured value here caused the 14 Sep false-delete incident (see
+        // syncCycle's own comment in syncRecords.ts for the full mechanism).
+        const result = await syncCycle(loadAppState);
         if (cancelled) return;
         if (result.ok && result.mergedState) {
           if (before) {

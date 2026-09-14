@@ -213,7 +213,10 @@ export const ManagementScreens: React.FC<ManagementScreensProps> = ({
       const before = loadAppState();
       setSyncUploadStatus('checking');
 
-      const result = await syncCycle(before);
+      // Pass the getter, not the value — see syncCycle's own comment in
+      // syncRecords.ts (the 14 Sep false-delete incident) for why the read
+      // must happen inside syncCycle itself, right after it takes its lock.
+      const result = await syncCycle(loadAppState);
       if (!isMounted) return;
 
       if (!result.ok) {

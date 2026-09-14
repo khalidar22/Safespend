@@ -419,15 +419,32 @@ const PULL_PAGE_SIZE = 500;
  * (not just one page) so an account with a long history never gets stuck
  * with a cursor that silently stops advancing.
  */
-export async function syncCycle(localState: any): Promise<SyncResult> {
+export async function syncCycle(getState: () => any): Promise<SyncResult> {
   if (syncInFlight) return { ok: false, pushed: 0, pulled: 0, error: 'busy' };
   syncInFlight = true;
 
   try {
+    // 14 Sep field-test incident (claude/safespend_phase7d_false_delete_incident.md):
+    // this read MUST happen here — synchronously, as the very first thing
+    // inside this try block, before any `await` — not in the caller. A
+    // caller that reads the state once and hands syncCycle the VALUE can be
+    // suspended for a while before this call actually runs (iOS backgrounds
+    // a tab mid-await for seconds at a time), during which another syncCycle
+    // call can complete and move the snapshot's baseline forward. When the
+    // stale call then finally diffs its old captured value against that
+    // newer baseline, anything added in between looks like it "disappeared"
+    // and gets pushed as a tombstone — which the anti-undelete trigger then
+    // makes permanent. Reading via a getter, right after the lock and before
+    // any yield point, guarantees no other syncCycle call can have run in
+    // the gap (they all bail out on the busy check above while this lock is
+    // held), so whatever is read here is always consistent with the
+    // snapshot this call is about to compare it to.
+    const localState = getState();
+    if (!localState) return { ok: false, pushed: 0, pulled: 0, error: 'no-local-state' };
+
     const { data: sessionData } = await supabase.auth.getSession();
     const session = sessionData?.session;
     if (!session) return { ok: false, pushed: 0, pulled: 0, error: 'not-signed-in' };
-    if (!localState) return { ok: false, pushed: 0, pulled: 0, error: 'no-local-state' };
 
     const userId = session.user.id;
     const snapshot = loadSnapshot();
@@ -563,13 +580,16 @@ export function scheduleSync(getState: () => any): void {
     if (!hasSyncedThisSession) return;   // the gate — stays pending
     const getter = pendingGetState;
     pendingGetState = null;
-    if (getter) syncCycle(getter());
+    // Pass the getter itself, not getter() — see syncCycle's own comment for
+    // why the read must happen inside syncCycle, right after it takes the
+    // lock, rather than here.
+    if (getter) syncCycle(getter);
   }, DEBOUNCE_MS);
 }
 
 // Retry when connectivity returns.
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => {
-    if (hasSyncedThisSession && pendingGetState) syncCycle(pendingGetState());
+    if (hasSyncedThisSession && pendingGetState) syncCycle(pendingGetState);
   });
 }
