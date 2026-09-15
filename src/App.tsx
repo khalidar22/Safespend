@@ -386,58 +386,34 @@ export default function App() {
     freezeMethodVersion,
   ]);
 
-  // Safety-net save: capture state on page hide/close
-  useEffect(() => {
-    const saveOnExit = () => {
-      try {
-        const stateToSave = {
-          lang,
-          currency,
-          lastResetCycleKey,
-          showBalances,
-          userName,
-          userEmail,
-          isNameCustomized,
-          userSalary,
-          salaryDay,
-          userIncomeSource,
-          selectedPersona,
-          transactions,
-          savingBoxes,
-          commitments,
-          installments,
-          familyMembers,
-          goals,
-          billSplits,
-          linkedBankAccounts,
-          kidsCards,
-          microThresholdPct,
-          lastSeenAlertState,
-          lastDailyCalcDate,
-          todaysSafeAmount,
-          frozenWithSalary,
-          freezeMethodVersion,
-        };
-        saveAppState(stateToSave);
-      } catch (e) {
-        // Silently fail if storage is unavailable
-      }
-    };
-
-    document.addEventListener('visibilitychange', saveOnExit);
-    window.addEventListener('pagehide', saveOnExit);
-
-    return () => {
-      document.removeEventListener('visibilitychange', saveOnExit);
-      window.removeEventListener('pagehide', saveOnExit);
-    };
-  }, [
-    lang, currency, lastResetCycleKey, showBalances, userName, userEmail, isNameCustomized,
-    userSalary, salaryDay, userIncomeSource, selectedPersona,
-    transactions, savingBoxes, commitments, installments,
-    familyMembers, goals, microThresholdPct, lastSeenAlertState, lastDailyCalcDate, todaysSafeAmount,
-    frozenWithSalary, freezeMethodVersion,
-  ]);
+  // REMOVED 14 Sep 2026 — this "safety net" was the actual cause of a second
+  // false-delete incident during field testing, AFTER the syncCycle race was
+  // already fixed (claude/safespend_phase7d_false_delete_incident.md).
+  //
+  // This effect closed over `transactions`/`savingBoxes`/etc. and re-attached
+  // its `visibilitychange`/`pagehide` listeners every time any of them
+  // changed. checkCloud's OWN `visibilitychange` listener (registered once,
+  // at mount, in the effect above) is never removed, so it always keeps its
+  // original position in the DOM's listener order and fires first; this
+  // effect's listener gets removed and re-added on every dependency change
+  // and so normally fires after it with a fresh closure — EXCEPT that
+  // React's effect cleanup/re-attach runs asynchronously after the commit
+  // that added a new record, and iOS can suspend a backgrounding tab's JS
+  // queue at essentially the same instant it dispatches `visibilitychange`.
+  // When that happened, the OLD listener — still holding the PRE-add closure
+  // — fired and called saveAppState() with a state that did not include the
+  // record just added, overwriting localStorage's already-correct copy with
+  // a stale one. The very next sync cycle then read that stale localStorage,
+  // saw the record "missing" relative to what had already been pushed to the
+  // cloud (from before this clobber), and pushed a delete — reproducing the
+  // exact symptom the syncCycle fix above was meant to close, from an
+  // entirely different, App.tsx-level cause.
+  //
+  // This effect was never actually needed: the primary auto-save effect two
+  // effects up already runs on every one of these same state changes, so
+  // anything this one could "catch" on exit was already persisted before it
+  // could fire. It supplied risk (a second, laggier writer of the same
+  // localStorage key) with no corresponding benefit — do not re-add it.
 
   // Dynamic real-time clock state for the emulated smartphone status bar
   const [currentTime, setCurrentTime] = useState<string>('09:41');
